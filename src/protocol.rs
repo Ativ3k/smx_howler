@@ -66,7 +66,7 @@ pub const OFF_BREATHING: usize = 0x4C;
 pub const OFF_BREATHING_COUNT: usize = 0x4D;
 pub const OFF_BREATHING_COLORS: usize = 0x4E;
 pub const OFF_SHARED_SPEED: usize = 0x63;
-/// Seven-LED palette used by Colorful steady (effect 6).
+/// Five-LED palette used by Colorful steady (effect 6).
 pub const OFF_COLORFUL_STEADY_COLORS: usize = 0x66;
 pub const OFF_BLINK_COLOR: usize = 0x85;
 
@@ -79,7 +79,7 @@ pub const DPI_VALUES: [u16; DPI_VALUES_LEN] = [
 ];
 pub const DPI_VALUES_LEN: usize = 59;
 pub const DPI_STAGES: usize = 6;
-pub const COLORFUL_STEADY_COLORS: usize = 7;
+pub const COLORFUL_STEADY_COLORS: usize = 5;
 pub const BREATHING_COLORS: usize = 7;
 
 pub const EFFECT_COUNT: u8 = 10;
@@ -254,8 +254,8 @@ pub fn effect_description(code: u8) -> &'static str {
             "Neonowe, płynące linie. Prędkość.",
         ),
         6 => tr(
-            "A fixed multicolour gradient. Brightness, speed and a 7-LED palette.",
-            "Stały wielokolorowy gradient. Jasność, prędkość i paleta 7 LED-ów.",
+            "A fixed multicolour gradient. Brightness, speed and a 5-LED palette.",
+            "Stały wielokolorowy gradient. Jasność, prędkość i paleta 5 LED-ów.",
         ),
         7 => tr(
             "One colour blinking on and off.",
@@ -346,8 +346,6 @@ impl Default for SettingsDraft {
                 [0, 0, 255],
                 [255, 255, 0],
                 [0, 255, 255],
-                [255, 255, 255],
-                [0, 0, 0],
             ],
             breathing_brightness: 4,
             breathing_speed: 2,
@@ -886,10 +884,10 @@ mod tests {
         assert_eq!(draft.steady_brightness, 4);
         assert_eq!(draft.steady_color, [0x11, 0x22, 0x33]);
         assert_eq!(draft.colorful_steady_colors[0], [1, 2, 3]);
-        assert_eq!(draft.colorful_steady_colors[6], [19, 20, 21]);
+        assert_eq!(draft.colorful_steady_colors[4], [13, 14, 15]);
 
         draft.steady_color = [0xAA, 0xBB, 0xCC];
-        draft.colorful_steady_colors[6] = [0x10, 0x20, 0x30];
+        draft.colorful_steady_colors[4] = [0x10, 0x20, 0x30];
         draft.apply_to(&mut block);
 
         assert_eq!(block[OFF_STEADY], 0x43);
@@ -898,12 +896,16 @@ mod tests {
             &[0xAA, 0xBB, 0xCC]
         );
         assert_eq!(
-            &block[OFF_COLORFUL_STEADY_COLORS + 18..OFF_COLORFUL_STEADY_COLORS + 21],
+            &block[OFF_COLORFUL_STEADY_COLORS + 12..OFF_COLORFUL_STEADY_COLORS + 15],
             &[0x10, 0x20, 0x30]
         );
         assert_eq!(
             &block[OFF_COLORFUL_STEADY_COLORS..OFF_COLORFUL_STEADY_COLORS + 3],
             &[1, 2, 3]
+        );
+        assert_eq!(
+            &block[OFF_COLORFUL_STEADY_COLORS + 15..OFF_COLORFUL_STEADY_COLORS + 21],
+            &[16, 17, 18, 19, 20, 21]
         );
     }
 

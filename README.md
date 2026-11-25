@@ -120,7 +120,7 @@ Dostępne efekty:
 | 8   | Star blink         |
 | 9   | Wave               |
 
-W zależności od efektu można ustawić jasność, prędkość, pojedynczy kolor stały, paletę oddechania, paletę 7 LED-ów dla tęczowego stałego, wspólną prędkość animacji lub kolor migania.
+W zależności od efektu można ustawić jasność, prędkość, pojedynczy kolor stały, paletę oddechania, paletę 5 LED-ów dla tęczowego stałego, wspólną prędkość animacji lub kolor migania.
 
 ### Buttons
 

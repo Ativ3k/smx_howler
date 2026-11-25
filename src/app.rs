@@ -1439,7 +1439,7 @@ impl HowlerApp {
                         level_selector(ui, "Speed", &mut self.draft.shared_speed);
                         ui.add_space(8.0);
                         ui.label(
-                            RichText::new(tr("Palette (7 LEDs)", "Paleta (7 LED-ów)"))
+                            RichText::new(tr("Palette (5 LEDs)", "Paleta (5 LED-ów)"))
                                 .size(12.0)
                                 .color(MUTED),
                         );
@@ -3136,7 +3136,7 @@ fn colour_editor(ui: &mut egui::Ui, label: &str, color: &mut [u8; 3]) {
     });
 }
 
-fn palette_editor(ui: &mut egui::Ui, colors: &mut [[u8; 3]; 7]) {
+fn palette_editor(ui: &mut egui::Ui, colors: &mut [[u8; 3]]) {
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing.x = 10.0;
         for (index, color) in colors.iter_mut().enumerate() {
