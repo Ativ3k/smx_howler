@@ -1419,37 +1419,7 @@ impl HowlerApp {
                     2 => {
                         level_selector(ui, "Brightness", &mut self.draft.steady_brightness);
                         ui.add_space(8.0);
-                        ui.horizontal(|ui| {
-                            ui.label(tr("Colour slot", "Slot koloru"));
-                            let mut slot = self.draft.steady_slot as usize;
-                            egui::ComboBox::from_id_salt("steady_slot")
-                                .width(110.0)
-                                .selected_text(tr_format!("Colour {}", "Kolor {}", slot + 1))
-                                .show_ui(ui, |ui| {
-                                    for index in 0..STEADY_COLORS {
-                                        ui.selectable_value(
-                                            &mut slot,
-                                            index,
-                                            tr_format!("Colour {}", "Kolor {}", index + 1),
-                                        );
-                                    }
-                                });
-                            self.draft.steady_slot = slot as u8;
-                            let color = self.draft.steady_colors[slot.min(STEADY_COLORS - 1)];
-                            ui.label(
-                                RichText::new("•")
-                                    .size(18.0)
-                                    .color(Color32::from_rgb(color[0], color[1], color[2])),
-                            );
-                        });
-                        ui.add_space(8.0);
-                        ui.label(
-                            RichText::new(tr("Palette (7 colours)", "Paleta (7 kolorów)"))
-                                .size(12.0)
-                                .color(MUTED),
-                        );
-                        ui.add_space(4.0);
-                        palette_editor(ui, &mut self.draft.steady_colors);
+                        colour_editor(ui, tr("Colour", "Kolor"), &mut self.draft.steady_color);
                     }
                     3 => {
                         level_selector(ui, "Brightness", &mut self.draft.breathing_brightness);
@@ -1463,18 +1433,25 @@ impl HowlerApp {
                         );
                         palette_editor(ui, &mut self.draft.breathing_colors);
                     }
+                    6 => {
+                        level_selector(ui, "Brightness", &mut self.draft.steady_brightness);
+                        ui.add_space(6.0);
+                        level_selector(ui, "Speed", &mut self.draft.shared_speed);
+                        ui.add_space(8.0);
+                        ui.label(
+                            RichText::new(tr("Palette (7 LEDs)", "Paleta (7 LED-ów)"))
+                                .size(12.0)
+                                .color(MUTED),
+                        );
+                        ui.add_space(4.0);
+                        palette_editor(ui, &mut self.draft.colorful_steady_colors);
+                    }
                     7 => {
-                        ui.horizontal(|ui| {
-                            ui.label(tr("Blink colour", "Kolor migania"));
-                            ui.color_edit_button_srgb(&mut self.draft.blink_color);
-                            let [r, g, b] = self.draft.blink_color;
-                            ui.label(
-                                RichText::new(format!("#{r:02X}{g:02X}{b:02X}"))
-                                    .size(11.0)
-                                    .monospace()
-                                    .color(MUTED),
-                            );
-                        });
+                        colour_editor(
+                            ui,
+                            tr("Blink colour", "Kolor migania"),
+                            &mut self.draft.blink_color,
+                        );
                         ui.add_space(6.0);
                         ui.label(
                             RichText::new(tr(
@@ -3141,6 +3118,20 @@ fn level_selector(ui: &mut egui::Ui, label: &str, value: &mut u8) {
             })
             .size(10.0)
             .color(MUTED),
+        );
+    });
+}
+
+fn colour_editor(ui: &mut egui::Ui, label: &str, color: &mut [u8; 3]) {
+    ui.horizontal(|ui| {
+        ui.label(label);
+        ui.color_edit_button_srgb(color);
+        let [r, g, b] = *color;
+        ui.label(
+            RichText::new(format!("#{r:02X}{g:02X}{b:02X}"))
+                .size(11.0)
+                .monospace()
+                .color(MUTED),
         );
     });
 }

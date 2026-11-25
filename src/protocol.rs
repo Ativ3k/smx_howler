@@ -60,11 +60,14 @@ pub const OFF_STAGE_COLOR: usize = 0x2D;
 pub const OFF_EFFECT: usize = 0x45;
 pub const OFF_STREAMING: usize = 0x46;
 pub const OFF_STEADY: usize = 0x48;
+/// Single colour used by the Steady effect (effect 2).
+pub const OFF_STEADY_COLOR: usize = 0x49;
 pub const OFF_BREATHING: usize = 0x4C;
 pub const OFF_BREATHING_COUNT: usize = 0x4D;
 pub const OFF_BREATHING_COLORS: usize = 0x4E;
 pub const OFF_SHARED_SPEED: usize = 0x63;
-pub const OFF_STEADY_COLORS: usize = 0x66;
+/// Seven-LED palette used by Colorful steady (effect 6).
+pub const OFF_COLORFUL_STEADY_COLORS: usize = 0x66;
 pub const OFF_BLINK_COLOR: usize = 0x85;
 
 /// The DPI table from `Cfg.ini` (`DPISET`), 59 entries.
@@ -76,7 +79,7 @@ pub const DPI_VALUES: [u16; DPI_VALUES_LEN] = [
 ];
 pub const DPI_VALUES_LEN: usize = 59;
 pub const DPI_STAGES: usize = 6;
-pub const STEADY_COLORS: usize = 7;
+pub const COLORFUL_STEADY_COLORS: usize = 7;
 pub const BREATHING_COLORS: usize = 7;
 
 pub const EFFECT_COUNT: u8 = 10;
@@ -235,8 +238,8 @@ pub fn effect_description(code: u8) -> &'static str {
             "Tęcza przepływająca wokół korpusu. Jasność i prędkość.",
         ),
         2 => tr(
-            "One fixed colour. Brightness and colour slot.",
-            "Jeden stały kolor. Jasność i slot koloru.",
+            "One fixed colour. Brightness and colour.",
+            "Jeden stały kolor. Jasność i kolor.",
         ),
         3 => tr(
             "A slow pulse through the palette. Brightness, speed and colours.",
@@ -251,8 +254,8 @@ pub fn effect_description(code: u8) -> &'static str {
             "Neonowe, płynące linie. Prędkość.",
         ),
         6 => tr(
-            "A fixed multicolour gradient. Speed.",
-            "Stały wielokolorowy gradient. Prędkość.",
+            "A fixed multicolour gradient. Brightness, speed and a 7-LED palette.",
+            "Stały wielokolorowy gradient. Jasność, prędkość i paleta 7 LED-ów.",
         ),
         7 => tr(
             "One colour blinking on and off.",
@@ -292,8 +295,8 @@ pub struct SettingsDraft {
     pub streaming_brightness: u8,
     pub streaming_speed: u8,
     pub steady_brightness: u8,
-    pub steady_slot: u8,
-    pub steady_colors: [[u8; 3]; STEADY_COLORS],
+    pub steady_color: [u8; 3],
+    pub colorful_steady_colors: [[u8; 3]; COLORFUL_STEADY_COLORS],
     pub breathing_brightness: u8,
     pub breathing_speed: u8,
     pub breathing_colors: [[u8; 3]; BREATHING_COLORS],
@@ -336,8 +339,8 @@ impl Default for SettingsDraft {
             streaming_brightness: 4,
             streaming_speed: 2,
             steady_brightness: 4,
-            steady_slot: 0,
-            steady_colors: [
+            steady_color: [255, 0, 0],
+            colorful_steady_colors: [
                 [255, 0, 0],
                 [0, 255, 0],
                 [0, 0, 255],
@@ -385,7 +388,11 @@ impl SettingsDraft {
         draft.streaming_speed = clamp_nibble(stream & 0x0F);
         let steady = block[OFF_STEADY];
         draft.steady_brightness = clamp_nibble(steady >> 4);
-        draft.steady_slot = (steady & 0x0F).min(STEADY_COLORS as u8 - 1);
+        draft.steady_color = [
+            block[OFF_STEADY_COLOR],
+            block[OFF_STEADY_COLOR + 1],
+            block[OFF_STEADY_COLOR + 2],
+        ];
         let breath = block[OFF_BREATHING];
         draft.breathing_brightness = clamp_nibble(breath >> 4);
         draft.breathing_speed = clamp_nibble(breath & 0x0F);
@@ -393,8 +400,8 @@ impl SettingsDraft {
             let off = OFF_BREATHING_COLORS + i * 3;
             *color = [block[off], block[off + 1], block[off + 2]];
         }
-        for (i, color) in draft.steady_colors.iter_mut().enumerate() {
-            let off = OFF_STEADY_COLORS + i * 3;
+        for (i, color) in draft.colorful_steady_colors.iter_mut().enumerate() {
+            let off = OFF_COLORFUL_STEADY_COLORS + i * 3;
             *color = [block[off], block[off + 1], block[off + 2]];
         }
         draft.shared_speed = clamp_nibble(block[OFF_SHARED_SPEED] & 0x0F);
@@ -426,8 +433,9 @@ impl SettingsDraft {
         block[OFF_EFFECT] = self.effect.min(EFFECT_COUNT - 1);
         block[OFF_STREAMING] =
             (clamp_nibble(self.streaming_brightness) << 4) | clamp_nibble(self.streaming_speed);
-        block[OFF_STEADY] = (clamp_nibble(self.steady_brightness) << 4)
-            | (self.steady_slot.min(STEADY_COLORS as u8 - 1) & 0x0F);
+        block[OFF_STEADY] =
+            (clamp_nibble(self.steady_brightness) << 4) | (block[OFF_STEADY] & 0x0F);
+        block[OFF_STEADY_COLOR..OFF_STEADY_COLOR + 3].copy_from_slice(&self.steady_color);
         block[OFF_BREATHING] =
             (clamp_nibble(self.breathing_brightness) << 4) | clamp_nibble(self.breathing_speed);
         block[OFF_BREATHING_COUNT] = BREATHING_COLORS as u8;
@@ -437,8 +445,8 @@ impl SettingsDraft {
         }
         block[OFF_SHARED_SPEED] =
             (block[OFF_SHARED_SPEED] & 0xF0) | (clamp_nibble(self.shared_speed) & 0x0F);
-        for (i, color) in self.steady_colors.iter().enumerate() {
-            let off = OFF_STEADY_COLORS + i * 3;
+        for (i, color) in self.colorful_steady_colors.iter().enumerate() {
+            let off = OFF_COLORFUL_STEADY_COLORS + i * 3;
             block[off..off + 3].copy_from_slice(color);
         }
         block[OFF_BLINK_COLOR..OFF_BLINK_COLOR + 3].copy_from_slice(&self.blink_color);
@@ -851,6 +859,52 @@ mod tests {
         assert_eq!(&report[8..12], &[0x64, 0x0B, 0x04, 0x00]);
         assert_eq!(report[0x0D], 3);
         assert!(report[SETTINGS_LEN..].iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn steady_color_and_colorful_palette_are_separate() {
+        let mut block = vec![0u8; SETTINGS_LEN];
+        block[OFF_STEADY] = 0x43;
+        block[OFF_STEADY_COLOR..OFF_STEADY_COLOR + 3].copy_from_slice(&[0x11, 0x22, 0x33]);
+        for (index, color) in [
+            [1, 2, 3],
+            [4, 5, 6],
+            [7, 8, 9],
+            [10, 11, 12],
+            [13, 14, 15],
+            [16, 17, 18],
+            [19, 20, 21],
+        ]
+        .iter()
+        .enumerate()
+        {
+            let off = OFF_COLORFUL_STEADY_COLORS + index * 3;
+            block[off..off + 3].copy_from_slice(color);
+        }
+
+        let mut draft = SettingsDraft::from_block(&block).unwrap();
+        assert_eq!(draft.steady_brightness, 4);
+        assert_eq!(draft.steady_color, [0x11, 0x22, 0x33]);
+        assert_eq!(draft.colorful_steady_colors[0], [1, 2, 3]);
+        assert_eq!(draft.colorful_steady_colors[6], [19, 20, 21]);
+
+        draft.steady_color = [0xAA, 0xBB, 0xCC];
+        draft.colorful_steady_colors[6] = [0x10, 0x20, 0x30];
+        draft.apply_to(&mut block);
+
+        assert_eq!(block[OFF_STEADY], 0x43);
+        assert_eq!(
+            &block[OFF_STEADY_COLOR..OFF_STEADY_COLOR + 3],
+            &[0xAA, 0xBB, 0xCC]
+        );
+        assert_eq!(
+            &block[OFF_COLORFUL_STEADY_COLORS + 18..OFF_COLORFUL_STEADY_COLORS + 21],
+            &[0x10, 0x20, 0x30]
+        );
+        assert_eq!(
+            &block[OFF_COLORFUL_STEADY_COLORS..OFF_COLORFUL_STEADY_COLORS + 3],
+            &[1, 2, 3]
+        );
     }
 
     #[test]
