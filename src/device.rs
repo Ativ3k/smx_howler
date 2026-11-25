@@ -420,6 +420,18 @@ pub fn list_all_devices() -> Result<Vec<HidEntry>, String> {
     Ok(api.device_list().map(entry_from_info).collect())
 }
 
+/// Which SMX Howler transports are currently present in the HID tree.
+/// Returns `(usb_cable, receiver)`.
+pub fn available_transports() -> (bool, bool) {
+    match list_smx_devices() {
+        Ok(entries) => (
+            entries.iter().any(|entry| entry.pid == PID_CABLE),
+            entries.iter().any(|entry| entry.pid == PID_RECEIVER),
+        ),
+        Err(_) => (false, false),
+    }
+}
+
 fn entry_from_info(info: &DeviceInfo) -> HidEntry {
     HidEntry {
         pid: info.product_id(),

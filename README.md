@@ -45,7 +45,7 @@ Profil urządzenia: **BY-COMBO3** (6 etapów DPI, 59 wartości DPI, 20 slotów p
 1. Zamknij fabryczną aplikację SMX Howler (`OemDrv.exe`). Trzyma ona otwarty kanał HID i blokuje dostęp.
 2. Podłącz odbiornik 2.4 GHz lub kabel USB i włącz mysz.
 3. Uruchom `target\release\smx_howler.exe`.
-4. W nagłówku wybierz `2.4 GHz receiver` / `Odbiornik 2.4 GHz` albo `USB cable` / `Kabel USB`, następnie odśwież dane.
+4. W nagłówku wybierz `2.4 GHz receiver` / `Odbiornik 2.4 GHz` albo `USB cable` / `Kabel USB`, następnie odśwież dane. Niedostępny kanał jest wyszarzony z dopiskiem `(brak)` i podpowiedzią; jeśli wybrane połączenie zniknie, aplikacja przełączy się na drugie dostępne.
 5. Zmień ustawienia i zatwierdź przyciskiem `Apply` / `Zapisz` na danej zakładce.
 6. Język interfejsu zmienisz przyciskami `EN` / `PL` w prawym górnym rogu.
 
@@ -94,7 +94,7 @@ W prawym górnym rogu znajdują się przyciski `EN` i `PL`. Przełączenie tłum
 
 ### Overview
 
-Pokazuje poziom baterii, stan ładowania, transport, VID/PID, identyfikator firmware, stan linku odbiornika oraz aktualny profil (DPI, polling, efekt, liczbę zmienionych przycisków). Dane odświeżają się automatycznie; można też użyć `Refresh battery` i `Reload settings`.
+Pokazuje poziom baterii, stan ładowania, transport, VID/PID, identyfikator firmware, stan linku odbiornika oraz aktualny profil (DPI, polling, efekt, liczbę zmienionych przycisków). Dane odświeżają się automatycznie (domyślnie co 30 s; interwał zmienisz w zakładce `Advanced`); można też użyć `Refresh battery` i `Reload settings`.
 
 ### DPI & polling
 
@@ -155,6 +155,7 @@ Te same skróty należy ustawić w Discordzie w `User Settings → Keybinds`. Pr
 
 ### Advanced
 
+- Automatyczne odświeżanie — włączanie/wyłączanie i interwał 10–600 s (domyślnie 30 s). Zmiany są zapisywane od razu.
 - Skanowanie wszystkich kolekcji HID (`Show all HID devices`) z PID, usage, interfejsem, produktem i ścieżką.
 - Podgląd surowych bloków ustawień i przycisków w formacie hex.
 - Kopiowanie bloków do schowka i zapis zrzutów.
@@ -237,6 +238,7 @@ cargo run -- --write-test
 | Problem                               | Rozwiązanie                                                                                                       |
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `SMX Howler ... node not found`       | Zamknij `OemDrv.exe`, sprawdź kabel/odbiornik i uruchom `--list`.                                                 |
+| Kanał wyszarzony z dopiskiem `(brak)` | Kabel lub odbiornik nie jest wykryty; podłącz go, a aplikacja przełączy się na dostępne połączenie.              |
 | Bateria się nie zmienia               | Mysz jest uśpiona albo link jest zerwany; rusz myszą i odśwież.                                                   |
 | Zapis odrzucony / prośba o wybudzenie | Rusz myszą, aby link miał stan `Awake`, i ponów zapis.                                                            |
 | Ustawienia wracają po chwili          | Mysz spała podczas zapisu albo działała fabryczna aplikacja. Wybudź mysz, zamknij `OemDrv.exe` i zapisz ponownie. |

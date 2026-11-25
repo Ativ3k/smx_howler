@@ -99,6 +99,20 @@ impl State {
         Ok(())
     }
 
+    fn invalidate(&mut self, bank: Bank) {
+        match bank {
+            Bank::Cable => self.cable = None,
+            Bank::Receiver => self.receiver = None,
+        }
+    }
+
+    fn report_error(&mut self, err: String) {
+        if is_disconnected(&err) {
+            self.invalidate(self.target);
+        }
+        self.note(MessageLevel::Error, block_error(err, self.target));
+    }
+
     fn device(&self, bank: Bank) -> &SmxDevice {
         match bank {
             Bank::Cable => self.cable.as_ref().expect("cable opened"),
@@ -161,7 +175,7 @@ impl State {
                     buttons,
                 });
             }
-            Err(err) => self.note(MessageLevel::Error, err),
+            Err(err) => self.report_error(err),
         }
         self.refresh_status();
         self.emit(Event::Busy(false));
@@ -189,7 +203,7 @@ impl State {
                     );
                 }
             }
-            Err(err) => self.note(MessageLevel::Error, err),
+            Err(err) => self.report_error(err),
         }
         self.refresh_status();
         self.emit(Event::Busy(false));
@@ -236,7 +250,7 @@ impl State {
                     );
                 }
             }
-            Err(err) => self.note(MessageLevel::Error, err),
+            Err(err) => self.report_error(err),
         }
         self.refresh_status();
         self.emit(Event::Busy(false));
@@ -283,6 +297,7 @@ fn run(cmd_rx: Receiver<Command>, evt_tx: Sender<Event>, ctx: egui::Context) {
             }
             Command::Reload => state.reload(),
             Command::SetTarget(bank) => {
+                state.invalidate(bank);
                 state.target = bank;
                 state.reload();
             }
@@ -310,6 +325,31 @@ fn read_blocks(dev: &SmxDevice, bank: Bank) -> Result<(Vec<u8>, Vec<u8>), String
         .to_owned());
     }
     Ok((settings, buttons))
+}
+
+fn is_disconnected(err: &str) -> bool {
+    let lower = err.to_ascii_lowercase();
+    lower.contains("not connected")
+        || lower.contains("device is not connected")
+        || err.contains("nie jest połączone")
+}
+
+fn block_error(err: String, bank: Bank) -> String {
+    if !is_disconnected(&err) {
+        return err;
+    }
+    match bank {
+        Bank::Cable => tr(
+            "The USB cable is not connected. Plug in the cable (258A:002E) or select the 2.4 GHz receiver.",
+            "Kabel USB nie jest podłączony. Podłącz kabel (258A:002E) lub wybierz odbiornik 2.4 GHz.",
+        )
+        .to_owned(),
+        Bank::Receiver => tr(
+            "The 2.4 GHz receiver is not connected. Plug in the receiver (258A:002F) or select the USB cable.",
+            "Odbiornik 2.4 GHz nie jest podłączony. Podłącz odbiornik (258A:002F) lub wybierz kabel USB.",
+        )
+        .to_owned(),
+    }
 }
 
 fn apply_error(err: String, bank: Bank) -> String {

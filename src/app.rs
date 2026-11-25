@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use eframe::egui::{self, Align, Color32, CornerRadius, Layout, Margin, RichText, Stroke};
 
 use crate::config::{self, AppConfig};
-use crate::device::{list_all_devices, list_smx_devices, HidEntry};
+use crate::device::{available_transports, list_all_devices, list_smx_devices, HidEntry};
 use crate::discord::{self, Discord, DiscordConfig, Presence, PRESETS};
 use crate::i18n::{tr, tr_format, Lang};
 use crate::keys;
@@ -91,6 +91,9 @@ pub struct HowlerApp {
     busy: bool,
     messages: Vec<LogEntry>,
     next_auto_refresh: Instant,
+    usb_available: bool,
+    receiver_available: bool,
+    next_transport_check: Instant,
     show_all_slots: bool,
     capture: Option<usize>,
     editor: Option<ActionEditor>,
@@ -108,12 +111,24 @@ pub struct HowlerApp {
 impl HowlerApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         configure_style(&cc.egui_ctx);
-        let config = config::load();
+        let mut config = config::load();
         Lang::from_config(&config.language).set();
-        let bank = Bank::from_config(&config.bank);
+        let (usb_available, receiver_available) = available_transports();
+        let mut bank = Bank::from_config(&config.bank);
+        let mut startup_note = None;
+        if bank == Bank::Cable && !usb_available && receiver_available {
+            bank = Bank::Receiver;
+            config.bank = bank.config_key().to_owned();
+            let _ = config::save(&config);
+            startup_note = Some(tr(
+                "USB cable is not connected. Using the 2.4 GHz receiver.",
+                "Kabel USB nie jest podłączony. Używam odbiornika 2.4 GHz.",
+            ));
+        }
         let (worker, events) = Worker::spawn(cc.egui_ctx.clone());
         let discord = Discord::spawn();
         let draft = SettingsDraft::default();
+        let initial_refresh = Duration::from_secs(config.refresh_secs.clamp(10, 600));
         let mut app = Self {
             worker,
             events,
@@ -131,7 +146,10 @@ impl HowlerApp {
             tab: Tab::Overview,
             busy: true,
             messages: Vec::new(),
-            next_auto_refresh: Instant::now() + Duration::from_secs(30),
+            next_auto_refresh: Instant::now() + initial_refresh,
+            usb_available,
+            receiver_available,
+            next_transport_check: Instant::now() + Duration::from_secs(2),
             show_all_slots: false,
             capture: None,
             editor: None,
@@ -151,6 +169,9 @@ impl HowlerApp {
                 "Zamknij fabryczną aplikację SMX Howler (OemDrv.exe) przed zapisem ustawień — blokuje kanał HID producenta.",
             ),
         );
+        if let Some(note) = startup_note {
+            app.log(MessageLevel::Warning, note);
+        }
         app.worker.send(Command::SetTarget(bank));
         app.refresh_presence(true);
         app
@@ -206,6 +227,45 @@ impl HowlerApp {
     }
 
     fn tick(&mut self, ctx: &egui::Context) {
+        if Instant::now() >= self.next_transport_check {
+            self.next_transport_check = Instant::now() + Duration::from_secs(2);
+            let (usb, receiver) = available_transports();
+            let usb_lost = self.usb_available && !usb;
+            let receiver_lost = self.receiver_available && !receiver;
+            self.usb_available = usb;
+            self.receiver_available = receiver;
+
+            if !self.busy {
+                if self.bank == Bank::Cable
+                    && !usb
+                    && receiver
+                    && (usb_lost || !self.status.connected)
+                {
+                    self.log(
+                        MessageLevel::Warning,
+                        tr(
+                            "USB cable disconnected. Switched to the 2.4 GHz receiver.",
+                            "Kabel USB został odłączony. Przełączono na odbiornik 2.4 GHz.",
+                        ),
+                    );
+                    self.set_bank(Bank::Receiver);
+                } else if self.bank == Bank::Receiver
+                    && !receiver
+                    && usb
+                    && (receiver_lost || !self.status.connected)
+                {
+                    self.log(
+                        MessageLevel::Warning,
+                        tr(
+                            "2.4 GHz receiver disconnected. Switched to the USB cable.",
+                            "Odbiornik 2.4 GHz został odłączony. Przełączono na kabel USB.",
+                        ),
+                    );
+                    self.set_bank(Bank::Cable);
+                }
+            }
+        }
+
         if self.config.auto_refresh && !self.busy && Instant::now() >= self.next_auto_refresh {
             let secs = self.config.refresh_secs.clamp(10, 600);
             self.next_auto_refresh = Instant::now() + Duration::from_secs(secs);
@@ -293,9 +353,36 @@ impl HowlerApp {
         if bank == self.bank {
             return;
         }
-        self.bank = bank;
+        if bank == Bank::Cable && !self.usb_available {
+            self.log(
+                MessageLevel::Warning,
+                tr(
+                    "USB cable is not connected. Plug in the cable (258A:002E) to use it.",
+                    "Kabel USB nie jest podłączony. Podłącz kabel (258A:002E), aby go użyć.",
+                ),
+            );
+            return;
+        }
+        if bank == Bank::Receiver && !self.receiver_available {
+            self.log(
+                MessageLevel::Warning,
+                tr(
+                    "The 2.4 GHz receiver is not connected. Plug in the receiver (258A:002F) to use it.",
+                    "Odbiornik 2.4 GHz nie jest podłączony. Podłącz odbiornik (258A:002F), aby go użyć.",
+                ),
+            );
+            return;
+        }
         self.config.bank = bank.config_key().to_owned();
         self.save_config();
+        self.switch_bank(bank);
+    }
+
+    fn switch_bank(&mut self, bank: Bank) {
+        if bank == self.bank {
+            return;
+        }
+        self.bank = bank;
         self.busy = true;
         self.worker.send(Command::SetTarget(bank));
     }
@@ -477,18 +564,66 @@ impl HowlerApp {
                     .color(MUTED),
             );
             let mut chosen = self.bank;
-            ui.add(egui::Button::selectable(
-                chosen == Bank::Receiver,
-                tr("2.4 GHz receiver", "Odbiornik 2.4 GHz"),
-            ))
-            .clicked()
-            .then(|| chosen = Bank::Receiver);
-            ui.add(egui::Button::selectable(
-                chosen == Bank::Cable,
-                tr("USB cable", "Kabel USB"),
-            ))
-            .clicked()
-            .then(|| chosen = Bank::Cable);
+
+            let receiver_text = if self.receiver_available {
+                tr("2.4 GHz receiver", "Odbiornik 2.4 GHz")
+            } else {
+                tr(
+                    "2.4 GHz receiver (offline)",
+                    "Odbiornik 2.4 GHz (brak)",
+                )
+            };
+            let receiver = ui.add_enabled(
+                self.receiver_available,
+                egui::Button::selectable(chosen == Bank::Receiver, receiver_text),
+            );
+            let receiver = if self.receiver_available {
+                receiver
+            } else {
+                receiver.on_disabled_hover_text(tr(
+                    "The 2.4 GHz receiver is not connected. Plug in the receiver (258A:002F) to select it.",
+                    "Odbiornik 2.4 GHz nie jest podłączony. Podłącz odbiornik (258A:002F), aby go wybrać.",
+                ))
+            };
+            if receiver.clicked() {
+                chosen = Bank::Receiver;
+            }
+            if !self.receiver_available {
+                ui.label(RichText::new("!").size(12.0).strong().color(AMBER))
+                    .on_hover_text(tr(
+                        "The 2.4 GHz receiver is not connected. Plug in the receiver (258A:002F) to select it.",
+                        "Odbiornik 2.4 GHz nie jest podłączony. Podłącz odbiornik (258A:002F), aby go wybrać.",
+                    ));
+            }
+
+            let usb_text = if self.usb_available {
+                tr("USB cable", "Kabel USB")
+            } else {
+                tr("USB cable (offline)", "Kabel USB (brak)")
+            };
+            let usb = ui.add_enabled(
+                self.usb_available,
+                egui::Button::selectable(chosen == Bank::Cable, usb_text),
+            );
+            let usb = if self.usb_available {
+                usb
+            } else {
+                usb.on_disabled_hover_text(tr(
+                    "The USB cable is not connected. Plug in the cable (258A:002E) to select it.",
+                    "Kabel USB nie jest podłączony. Podłącz kabel (258A:002E), aby go wybrać.",
+                ))
+            };
+            if usb.clicked() {
+                chosen = Bank::Cable;
+            }
+            if !self.usb_available {
+                ui.label(RichText::new("!").size(12.0).strong().color(AMBER))
+                    .on_hover_text(tr(
+                        "The USB cable is not connected. Plug in the cable (258A:002E) to select it.",
+                        "Kabel USB nie jest podłączony. Podłącz kabel (258A:002E), aby go wybrać.",
+                    ));
+            }
+
             if chosen != self.bank {
                 self.set_bank(chosen);
             }
@@ -1216,6 +1351,7 @@ impl HowlerApp {
 
         ui.add_space(12.0);
         card(ui, |ui| {
+            ui.set_min_width(ui.available_width());
             ui.label(
                 RichText::new(tr("Parameters", "Parametry"))
                     .size(15.0)
@@ -1266,6 +1402,12 @@ impl HowlerApp {
                         );
                     });
                     ui.add_space(8.0);
+                    ui.label(
+                        RichText::new(tr("Palette (7 colours)", "Paleta (7 kolorów)"))
+                            .size(12.0)
+                            .color(MUTED),
+                    );
+                    ui.add_space(4.0);
                     palette_editor(ui, &mut self.draft.steady_colors);
                 }
                 3 => {
@@ -1343,6 +1485,7 @@ impl HowlerApp {
 
         ui.add_space(12.0);
         card(ui, |ui| {
+            ui.set_min_width(ui.available_width());
             ui.label(
                 RichText::new(tr("How the effects map", "Mapa efektów"))
                     .size(15.0)
@@ -1779,6 +1922,72 @@ impl HowlerApp {
             ),
         );
 
+        card(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(tr("Automatic refresh", "Automatyczne odświeżanie"))
+                        .size(15.0)
+                        .strong(),
+                );
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if ui
+                        .add_enabled(
+                            !self.busy,
+                            egui::Button::new(tr("Refresh now", "Odśwież teraz")),
+                        )
+                        .clicked()
+                    {
+                        self.refresh_now();
+                    }
+                });
+            });
+            ui.add_space(8.0);
+
+            let mut auto = self.config.auto_refresh;
+            let mut secs = self.config.refresh_secs.clamp(10, 600);
+            let mut changed = false;
+            ui.horizontal(|ui| {
+                changed |= ui
+                    .checkbox(
+                        &mut auto,
+                        tr("Refresh automatically", "Odświeżaj automatycznie"),
+                    )
+                    .changed();
+                ui.add_space(14.0);
+                ui.label(tr("Interval", "Interwał"));
+                changed |= ui
+                    .add(
+                        egui::DragValue::new(&mut secs)
+                            .range(10..=600)
+                            .speed(1.0)
+                            .suffix(" s"),
+                    )
+                    .changed();
+                ui.label(
+                    RichText::new(tr("10–600 s, default 30 s", "10–600 s, domyślnie 30 s"))
+                        .size(10.0)
+                        .color(MUTED),
+                );
+            });
+            if changed {
+                self.config.auto_refresh = auto;
+                self.config.refresh_secs = secs.clamp(10, 600);
+                self.next_auto_refresh =
+                    Instant::now() + Duration::from_secs(self.config.refresh_secs);
+                self.save_config();
+            }
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(tr(
+                    "Changes are saved immediately. Automatic refresh runs only while the app is open.",
+                    "Zmiany są zapisywane od razu. Automatyczne odświeżanie działa tylko przy otwartej aplikacji.",
+                ))
+                .size(10.0)
+                .color(MUTED),
+            );
+        });
+
+        ui.add_space(12.0);
         card(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(
@@ -2851,14 +3060,18 @@ fn level_selector(ui: &mut egui::Ui, label: &str, value: &mut u8) {
 fn palette_editor(ui: &mut egui::Ui, colors: &mut [[u8; 3]; 7]) {
     ui.horizontal_wrapped(|ui| {
         for (index, color) in colors.iter_mut().enumerate() {
-            ui.vertical_centered(|ui| {
-                ui.color_edit_button_srgb(color);
-                ui.label(
-                    RichText::new(format!("{}", index + 1))
-                        .size(9.0)
-                        .color(MUTED),
-                );
-            });
+            ui.allocate_ui_with_layout(
+                egui::vec2(40.0, 42.0),
+                Layout::top_down(Align::Center),
+                |ui| {
+                    ui.color_edit_button_srgb(color);
+                    ui.label(
+                        RichText::new(format!("{}", index + 1))
+                            .size(9.0)
+                            .color(MUTED),
+                    );
+                },
+            );
             ui.add_space(4.0);
         }
     });
