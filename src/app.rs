@@ -1106,7 +1106,11 @@ impl HowlerApp {
             ),
         );
 
+        let column_spacing = ui.spacing().item_spacing.x;
+        ui.spacing_mut().item_spacing.x = 18.0;
         ui.columns(2, |cols| {
+            cols[0].spacing_mut().item_spacing.x = column_spacing;
+            cols[1].spacing_mut().item_spacing.x = column_spacing;
             card(&mut cols[0], |ui| {
                 ui.set_min_width(ui.available_width());
                 ui.label(
@@ -1177,7 +1181,7 @@ impl HowlerApp {
                 ui.add_space(8.0);
                 egui::Grid::new("dpi_stages")
                     .num_columns(4)
-                    .spacing([10.0, 8.0])
+                    .spacing([8.0, 7.0])
                     .show(ui, |ui| {
                         ui.label(
                             RichText::new(tr("ACTIVE", "AKTYWNY"))
@@ -1207,7 +1211,7 @@ impl HowlerApp {
 
                             let mut current = self.draft.stages[index].dpi_index;
                             egui::ComboBox::from_id_salt(("dpi_stage", index))
-                                .width(120.0)
+                                .width(112.0)
                                 .selected_text(format!("{} DPI", self.draft.stages[index].dpi()))
                                 .show_ui(ui, |ui| {
                                     for (dpi_index, value) in DPI_VALUES.iter().enumerate() {
@@ -1301,16 +1305,17 @@ impl HowlerApp {
                                     if selected { ACCENT } else { CARD_STROKE },
                                 ))
                                 .corner_radius(8)
-                                .inner_margin(Margin::same(10))
+                                .inner_margin(Margin::same(8))
                                 .show(ui, |ui| {
-                                    ui.set_width((cell_width - 20.0).max(1.0));
+                                    ui.set_width((cell_width - 16.0).max(1.0));
+                                    ui.spacing_mut().item_spacing.y = 3.0;
                                     ui.vertical_centered(|ui| {
                                         let dot = Color32::from_rgb(
                                             stage.color[0],
                                             stage.color[1],
                                             stage.color[2],
                                         );
-                                        ui.label(RichText::new("•").size(18.0).color(dot));
+                                        ui.label(RichText::new("•").size(16.0).color(dot));
                                         ui.label(
                                             RichText::new(format!("{}", stage.dpi())).strong(),
                                         );
@@ -1332,6 +1337,7 @@ impl HowlerApp {
                     });
             });
         });
+        ui.spacing_mut().item_spacing.x = column_spacing;
     }
 
     // -----------------------------------------------------------------
@@ -1348,24 +1354,24 @@ impl HowlerApp {
             ),
         );
 
+        let column_spacing = ui.spacing().item_spacing.x;
+        ui.spacing_mut().item_spacing.x = 18.0;
         ui.columns(2, |cols| {
+            cols[0].spacing_mut().item_spacing.x = column_spacing;
+            cols[1].spacing_mut().item_spacing.x = column_spacing;
             card(&mut cols[0], |ui| {
                 ui.set_min_width(ui.available_width());
                 ui.label(RichText::new(tr("Effect", "Efekt")).size(15.0).strong());
                 ui.add_space(8.0);
-                let width = (ui.available_width() - 12.0) / 2.0;
+                let width = (ui.available_width() - 10.0) / 2.0;
                 egui::Grid::new("effect_grid")
                     .num_columns(2)
                     .spacing([10.0, 8.0])
                     .show(ui, |ui| {
                         for code in 0..EFFECT_COUNT {
                             let selected = self.draft.effect == code;
-                            let label = format!("{}  {}", code, effect_name(code));
-                            let response = ui.add_sized(
-                                [width, 30.0],
-                                egui::Button::selectable(selected, RichText::new(label).size(13.0)),
-                            );
-                            let response = response.on_hover_text(effect_description(code));
+                            let response =
+                                effect_button(ui, code, effect_name(code), selected, width);
                             if response.clicked() {
                                 self.draft.effect = code;
                             }
@@ -1522,6 +1528,7 @@ impl HowlerApp {
                 }
             });
         });
+        ui.spacing_mut().item_spacing.x = column_spacing;
     }
 
     // -----------------------------------------------------------------
@@ -3043,6 +3050,67 @@ fn error_banner(ui: &mut egui::Ui, text: &str) {
         });
 }
 
+fn effect_button(
+    ui: &mut egui::Ui,
+    code: u8,
+    name: &str,
+    selected: bool,
+    width: f32,
+) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(width, 32.0), egui::Sense::click());
+    let (fill, stroke, badge_fill, badge_text, text_color) = {
+        let visuals = ui.visuals();
+        if selected {
+            (
+                visuals.selection.bg_fill,
+                visuals.selection.stroke,
+                ACCENT,
+                BG,
+                Color32::WHITE,
+            )
+        } else if response.hovered() {
+            (
+                visuals.widgets.hovered.weak_bg_fill,
+                visuals.widgets.hovered.bg_stroke,
+                ACCENT.gamma_multiply(0.18),
+                ACCENT,
+                visuals.text_color(),
+            )
+        } else {
+            (
+                visuals.widgets.inactive.weak_bg_fill,
+                Stroke::new(1.0, CARD_STROKE),
+                ACCENT.gamma_multiply(0.18),
+                ACCENT,
+                visuals.text_color(),
+            )
+        }
+    };
+
+    ui.painter()
+        .rect(rect, 8.0, fill, stroke, egui::StrokeKind::Inside);
+    let badge = egui::Rect::from_min_size(rect.min + egui::vec2(7.0, 6.0), egui::vec2(20.0, 20.0));
+    ui.painter().rect_filled(badge, 6.0, badge_fill);
+    ui.painter().text(
+        badge.center(),
+        egui::Align2::CENTER_CENTER,
+        code.to_string(),
+        egui::FontId::proportional(11.0),
+        badge_text,
+    );
+    ui.painter().text(
+        egui::pos2(badge.right() + 8.0, rect.center().y),
+        egui::Align2::LEFT_CENTER,
+        name,
+        egui::FontId::proportional(12.5),
+        text_color,
+    );
+
+    response
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
+        .on_hover_text(effect_description(code))
+}
+
 fn level_selector(ui: &mut egui::Ui, label: &str, value: &mut u8) {
     let label = match label {
         "Brightness" => tr("Brightness", "Jasność"),
@@ -3078,20 +3146,29 @@ fn level_selector(ui: &mut egui::Ui, label: &str, value: &mut u8) {
 
 fn palette_editor(ui: &mut egui::Ui, colors: &mut [[u8; 3]; 7]) {
     ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 10.0;
         for (index, color) in colors.iter_mut().enumerate() {
             ui.allocate_ui_with_layout(
-                egui::vec2(40.0, 42.0),
+                egui::vec2(40.0, 44.0),
                 Layout::top_down(Align::Center),
                 |ui| {
+                    ui.spacing_mut().item_spacing.y = 3.0;
                     ui.color_edit_button_srgb(color);
-                    ui.label(
-                        RichText::new(format!("{}", index + 1))
-                            .size(9.0)
-                            .color(MUTED),
-                    );
+                    egui::Frame::new()
+                        .fill(ACCENT.gamma_multiply(0.18))
+                        .stroke(Stroke::new(1.0, ACCENT.gamma_multiply(0.35)))
+                        .corner_radius(6)
+                        .inner_margin(Margin::symmetric(6, 1))
+                        .show(ui, |ui| {
+                            ui.label(
+                                RichText::new(format!("{}", index + 1))
+                                    .size(9.5)
+                                    .strong()
+                                    .color(ACCENT),
+                            );
+                        });
                 },
             );
-            ui.add_space(4.0);
         }
     });
 }
