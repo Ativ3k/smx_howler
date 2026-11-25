@@ -1307,7 +1307,8 @@ impl HowlerApp {
                                 .corner_radius(8)
                                 .inner_margin(Margin::same(8))
                                 .show(ui, |ui| {
-                                    ui.set_width((cell_width - 16.0).max(1.0));
+                                    // 2 × 8 px inner margin + 2 × 1 px frame stroke.
+                                    ui.set_width((cell_width - 18.0).max(1.0));
                                     ui.spacing_mut().item_spacing.y = 3.0;
                                     ui.vertical_centered(|ui| {
                                         let dot = Color32::from_rgb(
