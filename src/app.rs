@@ -1106,142 +1106,155 @@ impl HowlerApp {
             ),
         );
 
-        card(ui, |ui| {
-            ui.label(
-                RichText::new(tr("Polling rate", "Częstotliwość raportowania"))
-                    .size(15.0)
-                    .strong(),
-            );
-            ui.label(
-                RichText::new(tr(
-                    "USB report interval. Lower is faster; higher uses slightly less power.",
-                    "Interwał raportowania USB. Niższy jest szybszy; wyższy zużywa nieco mniej energii.",
-                ))
-                .size(11.0)
-                .color(MUTED),
-            );
-            ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                for hz in [125u16, 250, 500, 1000] {
-                    let selected = self.draft.polling_hz == hz;
-                    let label = format!("{}  ·  {}", polling_label(hz), polling_ms(hz));
-                    if ui
-                        .add_sized([150.0, 32.0], egui::Button::selectable(selected, label))
-                        .clicked()
-                    {
-                        self.draft.polling_hz = hz;
-                    }
-                }
+        ui.columns(2, |cols| {
+            card(&mut cols[0], |ui| {
+                ui.set_min_width(ui.available_width());
+                ui.label(
+                    RichText::new(tr("Polling rate", "Częstotliwość raportowania"))
+                        .size(15.0)
+                        .strong(),
+                );
+                ui.label(
+                    RichText::new(tr(
+                        "USB report interval. Lower is faster; higher uses slightly less power.",
+                        "Interwał raportowania USB. Niższy jest szybszy; wyższy zużywa \
+                     nieco mniej energii.",
+                    ))
+                    .size(11.0)
+                    .color(MUTED),
+                );
+                ui.add_space(8.0);
+                let button_width = (ui.available_width() - 8.0) / 2.0;
+                egui::Grid::new("polling_grid")
+                    .num_columns(2)
+                    .spacing([8.0, 8.0])
+                    .show(ui, |ui| {
+                        for (index, hz) in [125u16, 250, 500, 1000].into_iter().enumerate() {
+                            let selected = self.draft.polling_hz == hz;
+                            let label = format!("{}  ·  {}", polling_label(hz), polling_ms(hz));
+                            if ui
+                                .add_sized(
+                                    [button_width, 32.0],
+                                    egui::Button::selectable(selected, label),
+                                )
+                                .clicked()
+                            {
+                                self.draft.polling_hz = hz;
+                            }
+                            if index % 2 == 1 {
+                                ui.end_row();
+                            }
+                        }
+                    });
+                ui.add_space(4.0);
+                ui.label(
+                    RichText::new(tr(
+                        "1000 Hz is the factory setting. Some receivers prefer 500 Hz for a \
+                     more stable link.",
+                        "1000 Hz to ustawienie fabryczne. Niektóre odbiorniki wolą 500 Hz dla \
+                     stabilniejszego połączenia.",
+                    ))
+                    .size(10.0)
+                    .color(MUTED),
+                );
             });
-            ui.add_space(4.0);
-            ui.label(
-                RichText::new(tr(
-                    "1000 Hz is the factory setting. Some receivers prefer 500 Hz for a more stable link.",
-                    "1000 Hz to ustawienie fabryczne. Niektóre odbiorniki wolą 500 Hz dla stabilniejszego połączenia.",
-                ))
-                .size(10.0)
-                .color(MUTED),
-            );
-        });
 
-        ui.add_space(12.0);
-        card(ui, |ui| {
-            ui.horizontal(|ui| {
+            card(&mut cols[1], |ui| {
+                ui.set_min_width(ui.available_width());
                 ui.label(
                     RichText::new(tr("DPI stages", "Etapy DPI"))
                         .size(15.0)
                         .strong(),
                 );
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    ui.label(
-                        RichText::new(tr(
-                            "The colour is shown on the scroll-wheel LED for that stage.",
-                            "Kolor jest pokazywany na LED rolki dla danego etapu.",
-                        ))
-                        .size(10.0)
-                        .color(MUTED),
-                    );
-                });
-            });
-            ui.add_space(8.0);
-            egui::Grid::new("dpi_stages")
-                .num_columns(4)
-                .spacing([18.0, 10.0])
-                .show(ui, |ui| {
-                    ui.label(
-                        RichText::new(tr("ACTIVE", "AKTYWNY"))
-                            .size(10.0)
-                            .color(MUTED),
-                    );
-                    ui.label(RichText::new(tr("STAGE", "ETAP")).size(10.0).color(MUTED));
-                    ui.label(
-                        RichText::new(tr("SENSITIVITY", "CZUŁOŚĆ"))
-                            .size(10.0)
-                            .color(MUTED),
-                    );
-                    ui.label(
-                        RichText::new(tr("WHEEL LED", "LED ROLKI"))
-                            .size(10.0)
-                            .color(MUTED),
-                    );
-                    ui.end_row();
-
-                    for index in 0..DPI_STAGES {
-                        let stage_number = (index + 1) as u8;
-                        ui.radio_value(&mut self.draft.active_stage, stage_number, "");
+                ui.label(
+                    RichText::new(tr(
+                        "The colour is shown on the scroll-wheel LED for that stage.",
+                        "Kolor jest pokazywany na LED rolki dla danego etapu.",
+                    ))
+                    .size(10.0)
+                    .color(MUTED),
+                );
+                ui.add_space(8.0);
+                egui::Grid::new("dpi_stages")
+                    .num_columns(4)
+                    .spacing([10.0, 8.0])
+                    .show(ui, |ui| {
                         ui.label(
-                            RichText::new(tr_format!("Stage {}", "Etap {}", stage_number))
-                                .size(13.0),
+                            RichText::new(tr("ACTIVE", "AKTYWNY"))
+                                .size(10.0)
+                                .color(MUTED),
                         );
-
-                        let mut current = self.draft.stages[index].dpi_index;
-                        egui::ComboBox::from_id_salt(("dpi_stage", index))
-                            .width(140.0)
-                            .selected_text(format!("{} DPI", self.draft.stages[index].dpi()))
-                            .show_ui(ui, |ui| {
-                                for (dpi_index, value) in DPI_VALUES.iter().enumerate() {
-                                    ui.selectable_value(
-                                        &mut current,
-                                        dpi_index as u8,
-                                        format!("{value} DPI"),
-                                    );
-                                }
-                            });
-                        self.draft.stages[index].dpi_index = current;
-
-                        ui.horizontal(|ui| {
-                            ui.color_edit_button_srgb(&mut self.draft.stages[index].color);
-                            let [r, g, b] = self.draft.stages[index].color;
-                            ui.label(
-                                RichText::new(format!("#{r:02X}{g:02X}{b:02X}"))
-                                    .size(11.0)
-                                    .monospace()
-                                    .color(MUTED),
-                            );
-                        });
+                        ui.label(RichText::new(tr("STAGE", "ETAP")).size(10.0).color(MUTED));
+                        ui.label(
+                            RichText::new(tr("SENSITIVITY", "CZUŁOŚĆ"))
+                                .size(10.0)
+                                .color(MUTED),
+                        );
+                        ui.label(
+                            RichText::new(tr("WHEEL LED", "LED ROLKI"))
+                                .size(10.0)
+                                .color(MUTED),
+                        );
                         ui.end_row();
+
+                        for index in 0..DPI_STAGES {
+                            let stage_number = (index + 1) as u8;
+                            ui.radio_value(&mut self.draft.active_stage, stage_number, "");
+                            ui.label(
+                                RichText::new(tr_format!("Stage {}", "Etap {}", stage_number))
+                                    .size(13.0),
+                            );
+
+                            let mut current = self.draft.stages[index].dpi_index;
+                            egui::ComboBox::from_id_salt(("dpi_stage", index))
+                                .width(120.0)
+                                .selected_text(format!("{} DPI", self.draft.stages[index].dpi()))
+                                .show_ui(ui, |ui| {
+                                    for (dpi_index, value) in DPI_VALUES.iter().enumerate() {
+                                        ui.selectable_value(
+                                            &mut current,
+                                            dpi_index as u8,
+                                            format!("{value} DPI"),
+                                        );
+                                    }
+                                });
+                            self.draft.stages[index].dpi_index = current;
+
+                            ui.horizontal(|ui| {
+                                ui.color_edit_button_srgb(&mut self.draft.stages[index].color);
+                                let [r, g, b] = self.draft.stages[index].color;
+                                ui.label(
+                                    RichText::new(format!("#{r:02X}{g:02X}{b:02X}"))
+                                        .size(11.0)
+                                        .monospace()
+                                        .color(MUTED),
+                                );
+                            });
+                            ui.end_row();
+                        }
+                    });
+
+                ui.add_space(12.0);
+                let dirty = self.draft != self.loaded_draft;
+                ui.horizontal_wrapped(|ui| {
+                    if ui
+                        .add_enabled(
+                            !self.busy && dirty,
+                            egui::Button::new(tr("Apply DPI & polling", "Zapisz DPI i polling")),
+                        )
+                        .clicked()
+                    {
+                        self.apply_settings();
+                    }
+                    if ui.button(tr("Factory stages", "Etapy fabryczne")).clicked() {
+                        self.draft.stages = factory_stages();
+                        self.draft.active_stage = 1;
+                    }
+                    if ui.button(tr("Revert", "Przywróć")).clicked() {
+                        self.draft = self.loaded_draft.clone();
                     }
                 });
-
-            ui.add_space(12.0);
-            ui.horizontal(|ui| {
-                let dirty = self.draft != self.loaded_draft;
-                if ui
-                    .add_enabled(
-                        !self.busy && dirty,
-                        egui::Button::new(tr("Apply DPI & polling", "Zapisz DPI i polling")),
-                    )
-                    .clicked()
-                {
-                    self.apply_settings();
-                }
-                if ui.button(tr("Factory stages", "Etapy fabryczne")).clicked() {
-                    self.draft.stages = factory_stages();
-                    self.draft.active_stage = 1;
-                }
-                if ui.button(tr("Revert", "Przywróć")).clicked() {
-                    self.draft = self.loaded_draft.clone();
-                }
+                ui.add_space(4.0);
                 if dirty {
                     ui.label(
                         RichText::new(tr("Unsaved changes", "Niezapisane zmiany"))
@@ -1256,49 +1269,67 @@ impl HowlerApp {
                     );
                 }
             });
-        });
 
-        ui.add_space(12.0);
-        card(ui, |ui| {
-            ui.label(
-                RichText::new(tr("Stage preview", "Podgląd etapów"))
-                    .size(15.0)
-                    .strong(),
-            );
-            ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                for index in 0..DPI_STAGES {
-                    let stage = &self.draft.stages[index];
-                    let selected = self.draft.active_stage == (index + 1) as u8;
-                    egui::Frame::new()
-                        .fill(if selected {
-                            CARD_BG_ALT
-                        } else {
-                            Color32::TRANSPARENT
-                        })
-                        .stroke(Stroke::new(
-                            1.0,
-                            if selected { ACCENT } else { CARD_STROKE },
-                        ))
-                        .corner_radius(8)
-                        .inner_margin(Margin::same(10))
-                        .show(ui, |ui| {
-                            ui.vertical_centered(|ui| {
-                                let dot = Color32::from_rgb(
-                                    stage.color[0],
-                                    stage.color[1],
-                                    stage.color[2],
-                                );
-                                ui.label(RichText::new("•").size(18.0).color(dot));
-                                ui.label(RichText::new(format!("{}", stage.dpi())).strong());
-                                ui.label(
-                                    RichText::new(tr_format!("Stage {}", "Etap {}", index + 1))
-                                        .size(9.0)
-                                        .color(MUTED),
-                                );
-                            });
-                        });
-                }
+            cols[0].add_space(12.0);
+            card(&mut cols[0], |ui| {
+                ui.label(
+                    RichText::new(tr("Stage preview", "Podgląd etapów"))
+                        .size(15.0)
+                        .strong(),
+                );
+                ui.add_space(8.0);
+                let gap = 8.0;
+                let preview_columns = 3usize;
+                let cell_width = ((ui.available_width() - gap * (preview_columns as f32 - 1.0))
+                    / preview_columns as f32)
+                    .max(80.0);
+                egui::Grid::new("stage_preview_grid")
+                    .num_columns(preview_columns)
+                    .spacing([gap, gap])
+                    .show(ui, |ui| {
+                        for index in 0..DPI_STAGES {
+                            let stage = &self.draft.stages[index];
+                            let selected = self.draft.active_stage == (index + 1) as u8;
+                            egui::Frame::new()
+                                .fill(if selected {
+                                    CARD_BG_ALT
+                                } else {
+                                    Color32::TRANSPARENT
+                                })
+                                .stroke(Stroke::new(
+                                    1.0,
+                                    if selected { ACCENT } else { CARD_STROKE },
+                                ))
+                                .corner_radius(8)
+                                .inner_margin(Margin::same(10))
+                                .show(ui, |ui| {
+                                    ui.set_width((cell_width - 20.0).max(1.0));
+                                    ui.vertical_centered(|ui| {
+                                        let dot = Color32::from_rgb(
+                                            stage.color[0],
+                                            stage.color[1],
+                                            stage.color[2],
+                                        );
+                                        ui.label(RichText::new("•").size(18.0).color(dot));
+                                        ui.label(
+                                            RichText::new(format!("{}", stage.dpi())).strong(),
+                                        );
+                                        ui.label(
+                                            RichText::new(tr_format!(
+                                                "Stage {}",
+                                                "Etap {}",
+                                                index + 1
+                                            ))
+                                            .size(9.0)
+                                            .color(MUTED),
+                                        );
+                                    });
+                                });
+                            if (index + 1) % preview_columns == 0 {
+                                ui.end_row();
+                            }
+                        }
+                    });
             });
         });
     }
@@ -1317,163 +1348,172 @@ impl HowlerApp {
             ),
         );
 
-        card(ui, |ui| {
-            ui.label(RichText::new(tr("Effect", "Efekt")).size(15.0).strong());
-            ui.add_space(8.0);
-            let width = (ui.available_width() - 12.0) / 2.0;
-            egui::Grid::new("effect_grid")
-                .num_columns(2)
-                .spacing([10.0, 8.0])
-                .show(ui, |ui| {
-                    for code in 0..EFFECT_COUNT {
-                        let selected = self.draft.effect == code;
-                        let label = format!("{}  {}", code, effect_name(code));
-                        let response = ui.add_sized(
-                            [width, 30.0],
-                            egui::Button::selectable(selected, RichText::new(label).size(13.0)),
-                        );
-                        let response = response.on_hover_text(effect_description(code));
-                        if response.clicked() {
-                            self.draft.effect = code;
+        ui.columns(2, |cols| {
+            card(&mut cols[0], |ui| {
+                ui.set_min_width(ui.available_width());
+                ui.label(RichText::new(tr("Effect", "Efekt")).size(15.0).strong());
+                ui.add_space(8.0);
+                let width = (ui.available_width() - 12.0) / 2.0;
+                egui::Grid::new("effect_grid")
+                    .num_columns(2)
+                    .spacing([10.0, 8.0])
+                    .show(ui, |ui| {
+                        for code in 0..EFFECT_COUNT {
+                            let selected = self.draft.effect == code;
+                            let label = format!("{}  {}", code, effect_name(code));
+                            let response = ui.add_sized(
+                                [width, 30.0],
+                                egui::Button::selectable(selected, RichText::new(label).size(13.0)),
+                            );
+                            let response = response.on_hover_text(effect_description(code));
+                            if response.clicked() {
+                                self.draft.effect = code;
+                            }
+                            if code % 2 == 1 {
+                                ui.end_row();
+                            }
                         }
-                        if code % 2 == 1 {
-                            ui.end_row();
-                        }
-                    }
-                });
-            ui.add_space(6.0);
-            ui.label(
-                RichText::new(effect_description(self.draft.effect))
-                    .size(12.0)
-                    .color(MUTED),
-            );
-        });
-
-        ui.add_space(12.0);
-        card(ui, |ui| {
-            ui.set_min_width(ui.available_width());
-            ui.label(
-                RichText::new(tr("Parameters", "Parametry"))
-                    .size(15.0)
-                    .strong(),
-            );
-            ui.add_space(8.0);
-
-            match self.draft.effect {
-                0 => {
-                    ui.label(
-                        RichText::new(tr(
-                            "All body lighting is off. The scroll-wheel DPI indicator can stay lit.",
-                            "Całe podświetlenie korpusu jest wyłączone. Wskaźnik DPI na rolce może pozostać podświetlony.",
-                        ))
+                    });
+                ui.add_space(6.0);
+                ui.label(
+                    RichText::new(effect_description(self.draft.effect))
                         .size(12.0)
                         .color(MUTED),
-                    );
-                }
-                1 => {
-                    level_selector(ui, "Brightness", &mut self.draft.streaming_brightness);
-                    ui.add_space(6.0);
-                    level_selector(ui, "Speed", &mut self.draft.streaming_speed);
-                }
-                2 => {
-                    level_selector(ui, "Brightness", &mut self.draft.steady_brightness);
-                    ui.add_space(8.0);
-                    ui.horizontal(|ui| {
-                        ui.label(tr("Colour slot", "Slot koloru"));
-                        let mut slot = self.draft.steady_slot as usize;
-                        egui::ComboBox::from_id_salt("steady_slot")
-                            .width(110.0)
-                            .selected_text(tr_format!("Colour {}", "Kolor {}", slot + 1))
-                            .show_ui(ui, |ui| {
-                                for index in 0..STEADY_COLORS {
-                                    ui.selectable_value(
-                                        &mut slot,
-                                        index,
-                                        tr_format!("Colour {}", "Kolor {}", index + 1),
-                                    );
-                                }
-                            });
-                        self.draft.steady_slot = slot as u8;
-                        let color = self.draft.steady_colors[slot.min(STEADY_COLORS - 1)];
+                );
+            });
+
+            card(&mut cols[1], |ui| {
+                ui.set_min_width(ui.available_width());
+                ui.label(
+                    RichText::new(tr("Parameters", "Parametry"))
+                        .size(15.0)
+                        .strong(),
+                );
+                ui.add_space(8.0);
+
+                match self.draft.effect {
+                    0 => {
                         ui.label(
-                            RichText::new("•")
-                                .size(18.0)
-                                .color(Color32::from_rgb(color[0], color[1], color[2])),
+                            RichText::new(tr(
+                                "All body lighting is off. The scroll-wheel DPI indicator can \
+                             stay lit.",
+                                "Całe podświetlenie korpusu jest wyłączone. Wskaźnik DPI na rolce \
+                             może pozostać podświetlony.",
+                            ))
+                            .size(12.0)
+                            .color(MUTED),
                         );
-                    });
-                    ui.add_space(8.0);
-                    ui.label(
-                        RichText::new(tr("Palette (7 colours)", "Paleta (7 kolorów)"))
-                            .size(12.0)
-                            .color(MUTED),
-                    );
-                    ui.add_space(4.0);
-                    palette_editor(ui, &mut self.draft.steady_colors);
-                }
-                3 => {
-                    level_selector(ui, "Brightness", &mut self.draft.breathing_brightness);
-                    ui.add_space(6.0);
-                    level_selector(ui, "Speed", &mut self.draft.breathing_speed);
-                    ui.add_space(8.0);
-                    ui.label(
-                        RichText::new(tr("Palette", "Paleta"))
-                            .size(12.0)
-                            .color(MUTED),
-                    );
-                    palette_editor(ui, &mut self.draft.breathing_colors);
-                }
-                7 => {
-                    ui.horizontal(|ui| {
-                        ui.label(tr("Blink colour", "Kolor migania"));
-                        ui.color_edit_button_srgb(&mut self.draft.blink_color);
-                        let [r, g, b] = self.draft.blink_color;
+                    }
+                    1 => {
+                        level_selector(ui, "Brightness", &mut self.draft.streaming_brightness);
+                        ui.add_space(6.0);
+                        level_selector(ui, "Speed", &mut self.draft.streaming_speed);
+                    }
+                    2 => {
+                        level_selector(ui, "Brightness", &mut self.draft.steady_brightness);
+                        ui.add_space(8.0);
+                        ui.horizontal(|ui| {
+                            ui.label(tr("Colour slot", "Slot koloru"));
+                            let mut slot = self.draft.steady_slot as usize;
+                            egui::ComboBox::from_id_salt("steady_slot")
+                                .width(110.0)
+                                .selected_text(tr_format!("Colour {}", "Kolor {}", slot + 1))
+                                .show_ui(ui, |ui| {
+                                    for index in 0..STEADY_COLORS {
+                                        ui.selectable_value(
+                                            &mut slot,
+                                            index,
+                                            tr_format!("Colour {}", "Kolor {}", index + 1),
+                                        );
+                                    }
+                                });
+                            self.draft.steady_slot = slot as u8;
+                            let color = self.draft.steady_colors[slot.min(STEADY_COLORS - 1)];
+                            ui.label(
+                                RichText::new("•")
+                                    .size(18.0)
+                                    .color(Color32::from_rgb(color[0], color[1], color[2])),
+                            );
+                        });
+                        ui.add_space(8.0);
                         ui.label(
-                            RichText::new(format!("#{r:02X}{g:02X}{b:02X}"))
-                                .size(11.0)
-                                .monospace()
+                            RichText::new(tr("Palette (7 colours)", "Paleta (7 kolorów)"))
+                                .size(12.0)
                                 .color(MUTED),
                         );
-                    });
-                    ui.add_space(6.0);
-                    ui.label(
-                        RichText::new(tr(
-                            "The default blink timing is used; 0x84/0x63 are preserved from the mouse.",
-                            "Używane jest domyślne tempo migania; 0x84/0x63 są zachowywane z myszy.",
-                        ))
-                        .size(11.0)
-                        .color(MUTED),
-                    );
+                        ui.add_space(4.0);
+                        palette_editor(ui, &mut self.draft.steady_colors);
+                    }
+                    3 => {
+                        level_selector(ui, "Brightness", &mut self.draft.breathing_brightness);
+                        ui.add_space(6.0);
+                        level_selector(ui, "Speed", &mut self.draft.breathing_speed);
+                        ui.add_space(8.0);
+                        ui.label(
+                            RichText::new(tr("Palette", "Paleta"))
+                                .size(12.0)
+                                .color(MUTED),
+                        );
+                        palette_editor(ui, &mut self.draft.breathing_colors);
+                    }
+                    7 => {
+                        ui.horizontal(|ui| {
+                            ui.label(tr("Blink colour", "Kolor migania"));
+                            ui.color_edit_button_srgb(&mut self.draft.blink_color);
+                            let [r, g, b] = self.draft.blink_color;
+                            ui.label(
+                                RichText::new(format!("#{r:02X}{g:02X}{b:02X}"))
+                                    .size(11.0)
+                                    .monospace()
+                                    .color(MUTED),
+                            );
+                        });
+                        ui.add_space(6.0);
+                        ui.label(
+                            RichText::new(tr(
+                                "The default blink timing is used; 0x84/0x63 are preserved from \
+                             the mouse.",
+                                "Używane jest domyślne tempo migania; 0x84/0x63 są zachowywane \
+                             z myszy.",
+                            ))
+                            .size(11.0)
+                            .color(MUTED),
+                        );
+                    }
+                    _ => {
+                        level_selector(ui, "Speed", &mut self.draft.shared_speed);
+                        ui.add_space(6.0);
+                        ui.label(
+                            RichText::new(tr(
+                                "This shared speed value is also used by the other animated \
+                             effects (4, 5, 6, 8 and 9).",
+                                "Ta wspólna wartość prędkości jest używana także przez pozostałe \
+                             animowane efekty (4, 5, 6, 8 i 9).",
+                            ))
+                            .size(11.0)
+                            .color(MUTED),
+                        );
+                    }
                 }
-                _ => {
-                    level_selector(ui, "Speed", &mut self.draft.shared_speed);
-                    ui.add_space(6.0);
-                    ui.label(
-                        RichText::new(tr(
-                            "This shared speed value is also used by the other animated effects (4, 5, 6, 8 and 9).",
-                            "Ta wspólna wartość prędkości jest używana także przez pozostałe animowane efekty (4, 5, 6, 8 i 9).",
-                        ))
-                        .size(11.0)
-                        .color(MUTED),
-                    );
-                }
-            }
 
-            ui.add_space(14.0);
-            ui.horizontal(|ui| {
+                ui.add_space(14.0);
                 let dirty = self.draft != self.loaded_draft;
-                if ui
-                    .add_enabled(
-                        !self.busy && dirty,
-                        egui::Button::new(tr("Apply lighting", "Zapisz podświetlenie")),
-                    )
-                    .clicked()
-                {
-                    self.apply_settings();
-                }
-                if ui.button(tr("Revert", "Przywróć")).clicked() {
-                    self.draft = self.loaded_draft.clone();
-                }
+                ui.horizontal(|ui| {
+                    if ui
+                        .add_enabled(
+                            !self.busy && dirty,
+                            egui::Button::new(tr("Apply lighting", "Zapisz podświetlenie")),
+                        )
+                        .clicked()
+                    {
+                        self.apply_settings();
+                    }
+                    if ui.button(tr("Revert", "Przywróć")).clicked() {
+                        self.draft = self.loaded_draft.clone();
+                    }
+                });
                 if dirty {
+                    ui.add_space(4.0);
                     ui.label(
                         RichText::new(tr("Unsaved changes", "Niezapisane zmiany"))
                             .size(11.0)
@@ -1481,27 +1521,6 @@ impl HowlerApp {
                     );
                 }
             });
-        });
-
-        ui.add_space(12.0);
-        card(ui, |ui| {
-            ui.set_min_width(ui.available_width());
-            ui.label(
-                RichText::new(tr("How the effects map", "Mapa efektów"))
-                    .size(15.0)
-                    .strong(),
-            );
-            ui.add_space(6.0);
-            ui.label(
-                RichText::new(tr(
-                    "None · Colorful streaming · Steady · Breathing · Tail · Neon · Colorful steady · Blinking · Star blink · Wave\n\
-                     Brightness and speed use 0–4. Steady chooses one of seven palette colours; Breathing cycles the whole palette.",
-                    "Brak · Tęczowy przepływ · Stały · Oddychanie · Ogon komety · Neon · Tęczowy stały · Miganie · Migoczące gwiazdy · Fala\n\
-                     Jasność i prędkość używają 0–4. Stały wybiera jeden z siedmiu kolorów palety; Oddychanie przechodzi przez całą paletę.",
-                ))
-                .size(11.0)
-                .color(MUTED),
-            );
         });
     }
 
