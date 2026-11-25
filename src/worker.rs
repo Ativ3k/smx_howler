@@ -4,6 +4,7 @@ use std::thread;
 use eframe::egui;
 
 use crate::device::{self, SmxDevice};
+use crate::i18n::{tr, tr_format};
 use crate::protocol::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -76,7 +77,7 @@ impl State {
             Bank::Cable if self.cable.is_none() => match SmxDevice::open(PID_CABLE) {
                 Ok(dev) => {
                     self.cable = Some(dev);
-                    self.open_errors.retain(|e| !e.contains("cable"));
+                    self.open_errors.clear();
                 }
                 Err(err) => {
                     self.open_errors.push(err.clone());
@@ -86,7 +87,7 @@ impl State {
             Bank::Receiver if self.receiver.is_none() => match SmxDevice::open(PID_RECEIVER) {
                 Ok(dev) => {
                     self.receiver = Some(dev);
-                    self.open_errors.retain(|e| !e.contains("receiver"));
+                    self.open_errors.clear();
                 }
                 Err(err) => {
                     self.open_errors.push(err.clone());
@@ -180,7 +181,11 @@ impl State {
                 } else {
                     self.note(
                         MessageLevel::Success,
-                        format!("Lighting, DPI and polling saved to the {}.", bank.label()),
+                        tr_format!(
+                            "Lighting, DPI and polling saved to the {}.",
+                            "Podświetlenie, DPI i polling zapisano w {}.",
+                            bank.label()
+                        ),
                     );
                 }
             }
@@ -223,7 +228,11 @@ impl State {
                 } else {
                     self.note(
                         MessageLevel::Success,
-                        format!("Button assignments saved to the {}.", bank.label()),
+                        tr_format!(
+                            "Button assignments saved to the {}.",
+                            "Przypisania przycisków zapisano w {}.",
+                            bank.label()
+                        ),
                     );
                 }
             }
@@ -287,21 +296,31 @@ fn read_blocks(dev: &SmxDevice, bank: Bank) -> Result<(Vec<u8>, Vec<u8>), String
     let settings = dev.read_block(bank.settings_cmd())?;
     let buttons = dev.read_block(bank.buttons_cmd())?;
     if settings.len() < SETTINGS_LEN || settings[0] != 8 {
-        return Err("settings reply was too short.".to_owned());
+        return Err(tr(
+            "settings reply was too short.",
+            "odpowiedź z ustawieniami była zbyt krótka.",
+        )
+        .to_owned());
     }
     if buttons.len() < BUTTONS_LEN || buttons[0] != 8 {
-        return Err("button reply was too short.".to_owned());
+        return Err(tr(
+            "button reply was too short.",
+            "odpowiedź z przyciskami była zbyt krótka.",
+        )
+        .to_owned());
     }
     Ok((settings, buttons))
 }
 
 fn apply_error(err: String, bank: Bank) -> String {
-    if err.contains("asleep") || err.contains("link") {
+    if err.contains("asleep") || err.contains("uśpion") {
         err
     } else {
-        format!(
+        tr_format!(
             "{err} If this keeps happening, close the SMX Howler vendor app and reconnect \
-             the {}.",
+                 the {}.",
+            "{err} Jeśli problem się powtarza, zamknij aplikację SMX Howler i podłącz ponownie \
+                 {}.",
             bank.label()
         )
     }
@@ -309,7 +328,13 @@ fn apply_error(err: String, bank: Bank) -> String {
 
 fn read_back_warning(written: &[u8], read_back: &[u8]) -> Option<String> {
     if written.len() != read_back.len() {
-        return Some("The mouse returned a different block length after writing.".to_owned());
+        return Some(
+            tr(
+                "The mouse returned a different block length after writing.",
+                "Mysz zwróciła inny rozmiar bloku po zapisie.",
+            )
+            .to_owned(),
+        );
     }
     let diffs = written
         .iter()
@@ -320,18 +345,22 @@ fn read_back_warning(written: &[u8], read_back: &[u8]) -> Option<String> {
     if diffs == 0 {
         None
     } else {
-        Some(format!(
+        Some(tr_format!(
             "Written, but the read-back differs in {diffs} byte(s). The mouse may have \
-             refreshed live values (for example the active DPI stage)."
+                 refreshed live values (for example the active DPI stage).",
+            "Zapisano, ale odczyt różni się w {diffs} bajtach. Mysz mogła odświeżyć \
+                 wartości bieżące (np. aktywny etap DPI)."
         ))
     }
 }
 
 fn no_device_message(errors: &[String]) -> String {
-    let mut text = String::from(
+    let mut text = String::from(tr(
         "No SMX Howler found. Plug in the 2.4 GHz receiver or the USB cable, make sure the \
          mouse is switched on, and close the SMX Howler vendor app (OemDrv.exe).",
-    );
+        "Nie znaleziono SMX Howler. Podłącz odbiornik 2.4 GHz lub kabel USB, upewnij się, \
+         że mysz jest włączona, i zamknij aplikację SMX Howler (OemDrv.exe).",
+    ));
     for error in errors.iter().take(2) {
         text.push_str("\n\n");
         text.push_str(error);

@@ -4,6 +4,8 @@
 //! report header (`08 cmd 00 00 00 00 00 00`). Offsets below are offsets into
 //! that whole block, which is what the rest of the app stores.
 
+use crate::i18n::{tr, tr_format};
+
 pub const VID: u16 = 0x258A;
 pub const PID_CABLE: u16 = 0x002E;
 pub const PID_RECEIVER: u16 = 0x002F;
@@ -109,8 +111,8 @@ impl Bank {
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Cable => "USB cable",
-            Self::Receiver => "2.4 GHz receiver",
+            Self::Cable => tr("USB cable", "Kabel USB"),
+            Self::Receiver => tr("2.4 GHz receiver", "Odbiornik 2.4 GHz"),
         }
     }
 
@@ -148,24 +150,24 @@ impl DeviceStatus {
     pub fn battery_text(&self) -> String {
         match self.percent {
             Some(p) => format!("{p}%"),
-            None if self.charging => "Charging".to_owned(),
-            None => "Unknown".to_owned(),
+            None if self.charging => tr("Charging", "Ładowanie").to_owned(),
+            None => tr("Unknown", "Nieznany").to_owned(),
         }
     }
 
     pub fn state_text(&self) -> &'static str {
         if self.full {
-            "Fully charged"
+            tr("Fully charged", "W pełni naładowana")
         } else if self.charging {
-            "Charging"
+            tr("Charging", "Ładowanie")
         } else if self.asleep {
-            "Mouse asleep"
+            tr("Mouse asleep", "Mysz uśpiona")
         } else if self.percent.is_some() {
-            "On battery"
+            tr("On battery", "Na baterii")
         } else if self.connected {
-            "Battery level unavailable"
+            tr("Battery level unavailable", "Poziom baterii niedostępny")
         } else {
-            "Not connected"
+            tr("Not connected", "Nie połączono")
         }
     }
 }
@@ -208,32 +210,62 @@ pub fn polling_ms(hz: u16) -> &'static str {
 
 pub fn effect_name(code: u8) -> &'static str {
     match code {
-        0 => "Off",
-        1 => "Colorful streaming",
-        2 => "Steady",
-        3 => "Breathing",
-        4 => "Tail",
-        5 => "Neon",
-        6 => "Colorful steady",
-        7 => "Blinking",
-        8 => "Star blink",
-        9 => "Wave",
-        _ => "Unknown",
+        0 => tr("Off", "Wyłączone"),
+        1 => tr("Colorful streaming", "Tęczowy przepływ"),
+        2 => tr("Steady", "Stały"),
+        3 => tr("Breathing", "Oddychanie"),
+        4 => tr("Tail", "Ogon komety"),
+        5 => tr("Neon", "Neon"),
+        6 => tr("Colorful steady", "Tęczowy stały"),
+        7 => tr("Blinking", "Miganie"),
+        8 => tr("Star blink", "Migoczące gwiazdy"),
+        9 => tr("Wave", "Fala"),
+        _ => tr("Unknown", "Nieznany"),
     }
 }
 
 pub fn effect_description(code: u8) -> &'static str {
     match code {
-        0 => "All body lighting off. The scroll-wheel DPI indicator can stay lit.",
-        1 => "A rainbow streaming around the body. Brightness and speed.",
-        2 => "One fixed colour. Brightness and colour slot.",
-        3 => "A slow pulse through the palette. Brightness, speed and colours.",
-        4 => "A comet tail chasing around the shell. Speed.",
-        5 => "Neon-style flowing lines. Speed.",
-        6 => "A fixed multicolour gradient. Speed.",
-        7 => "One colour blinking on and off.",
-        8 => "Random twinkling stars. Speed.",
-        9 => "A moving wave of colour. Speed.",
+        0 => tr(
+            "All body lighting off. The scroll-wheel DPI indicator can stay lit.",
+            "Całe podświetlenie korpusu wyłączone. Wskaźnik DPI na rolce może pozostać podświetlony.",
+        ),
+        1 => tr(
+            "A rainbow streaming around the body. Brightness and speed.",
+            "Tęcza przepływająca wokół korpusu. Jasność i prędkość.",
+        ),
+        2 => tr(
+            "One fixed colour. Brightness and colour slot.",
+            "Jeden stały kolor. Jasność i slot koloru.",
+        ),
+        3 => tr(
+            "A slow pulse through the palette. Brightness, speed and colours.",
+            "Powolne pulsowanie przez paletę. Jasność, prędkość i kolory.",
+        ),
+        4 => tr(
+            "A comet tail chasing around the shell. Speed.",
+            "Ogon komety krążący wokół obudowy. Prędkość.",
+        ),
+        5 => tr(
+            "Neon-style flowing lines. Speed.",
+            "Neonowe, płynące linie. Prędkość.",
+        ),
+        6 => tr(
+            "A fixed multicolour gradient. Speed.",
+            "Stały wielokolorowy gradient. Prędkość.",
+        ),
+        7 => tr(
+            "One colour blinking on and off.",
+            "Jeden kolor migający włącz/wyłącz.",
+        ),
+        8 => tr(
+            "Random twinkling stars. Speed.",
+            "Losowo migoczące gwiazdy. Prędkość.",
+        ),
+        9 => tr(
+            "A moving wave of colour. Speed.",
+            "Przesuwająca się fala kolorów. Prędkość.",
+        ),
         _ => "",
     }
 }
@@ -542,18 +574,18 @@ impl ButtonAction {
 
     pub fn label(self) -> String {
         match self {
-            Self::Left => "Left click".to_owned(),
-            Self::Right => "Right click".to_owned(),
-            Self::Middle => "Middle click".to_owned(),
-            Self::Back => "Back".to_owned(),
-            Self::Forward => "Forward".to_owned(),
-            Self::VolumeUp => "Volume up".to_owned(),
-            Self::VolumeDown => "Volume down".to_owned(),
-            Self::DpiUp => "DPI up".to_owned(),
-            Self::DpiDown => "DPI down".to_owned(),
-            Self::DpiLoop => "DPI loop".to_owned(),
-            Self::LightingToggle => "Lighting on/off".to_owned(),
-            Self::Disabled => "Disabled".to_owned(),
+            Self::Left => tr("Left click", "Lewy klik").to_owned(),
+            Self::Right => tr("Right click", "Prawy klik").to_owned(),
+            Self::Middle => tr("Middle click", "Środkowy klik").to_owned(),
+            Self::Back => tr("Back", "Wstecz").to_owned(),
+            Self::Forward => tr("Forward", "Dalej").to_owned(),
+            Self::VolumeUp => tr("Volume up", "Głośniej").to_owned(),
+            Self::VolumeDown => tr("Volume down", "Ciszej").to_owned(),
+            Self::DpiUp => tr("DPI up", "DPI w górę").to_owned(),
+            Self::DpiDown => tr("DPI down", "DPI w dół").to_owned(),
+            Self::DpiLoop => tr("DPI loop", "Pętla DPI").to_owned(),
+            Self::LightingToggle => tr("Lighting on/off", "Podświetlenie wł./wył.").to_owned(),
+            Self::Disabled => tr("Disabled", "Wyłączone").to_owned(),
             Self::Keyboard { modifiers, usage } => {
                 let mut text = String::new();
                 if modifiers & MOD_CTRL != 0 {
@@ -575,12 +607,20 @@ impl ButtonAction {
                 number,
                 mode,
                 count,
-            } => {
-                format!("Macro {number} (mode {mode}, {count} event(s))")
-            }
-            Self::Custom(bytes) => format!(
+            } => tr_format!(
+                "Macro {} (mode {}, {} event(s))",
+                "Makro {} (tryb {}, zdarzenia: {})",
+                number,
+                mode,
+                count
+            ),
+            Self::Custom(bytes) => tr_format!(
                 "Custom {:02X} {:02X} {:02X} {:02X}",
-                bytes[0], bytes[1], bytes[2], bytes[3]
+                "Własne {:02X} {:02X} {:02X} {:02X}",
+                bytes[0],
+                bytes[1],
+                bytes[2],
+                bytes[3]
             ),
         }
     }
@@ -594,7 +634,7 @@ pub fn hid_usage_name(usage: u8) -> &'static str {
         0x29 => "Esc",
         0x2A => "Backspace",
         0x2B => "Tab",
-        0x2C => "Space",
+        0x2C => tr("Space", "Spacja"),
         0x2D => "-",
         0x2E => "=",
         0x2F => "[",
@@ -622,17 +662,17 @@ pub fn hid_usage_name(usage: u8) -> &'static str {
         0x45 => "F12",
         0x46 => "Print Screen",
         0x47 => "Scroll Lock",
-        0x48 => "Pause",
+        0x48 => tr("Pause", "Pauza"),
         0x49 => "Insert",
         0x4A => "Home",
         0x4B => "Page Up",
         0x4C => "Delete",
         0x4D => "End",
         0x4E => "Page Down",
-        0x4F => "Right arrow",
-        0x50 => "Left arrow",
-        0x51 => "Down arrow",
-        0x52 => "Up arrow",
+        0x4F => tr("Right arrow", "Strzałka w prawo"),
+        0x50 => tr("Left arrow", "Strzałka w lewo"),
+        0x51 => tr("Down arrow", "Strzałka w dół"),
+        0x52 => tr("Up arrow", "Strzałka w górę"),
         0x53 => "Num Lock",
         0x54 => "Numpad /",
         0x55 => "Numpad *",
@@ -643,8 +683,8 @@ pub fn hid_usage_name(usage: u8) -> &'static str {
         0x62 => "Numpad 0",
         0x63 => "Numpad .",
         0x64 => "Non-US \\",
-        0x65 => "Application",
-        0x66 => "Power",
+        0x65 => tr("Application", "Aplikacja"),
+        0x66 => tr("Power", "Zasilanie"),
         0x67 => "Numpad =",
         0x68 => "F13",
         0x69 => "F14",
@@ -658,7 +698,7 @@ pub fn hid_usage_name(usage: u8) -> &'static str {
         0x71 => "F22",
         0x72 => "F23",
         0x73 => "F24",
-        _ => "Unknown key",
+        _ => tr("Unknown key", "Nieznany klawisz"),
     }
 }
 
@@ -697,14 +737,8 @@ pub const FACTORY_BUTTONS: [[u8; 4]; BUTTON_SLOTS] = [
 
 pub fn slot_label(index: usize) -> String {
     match index {
-        0 => "Button 1".to_owned(),
-        1 => "Button 2".to_owned(),
-        2 => "Button 3".to_owned(),
-        3 => "Button 4".to_owned(),
-        4 => "Button 5".to_owned(),
-        5 => "Button 6".to_owned(),
-        6 => "Button 7".to_owned(),
-        n => format!("Slot {}", n + 1),
+        0..=6 => tr_format!("Button {}", "Przycisk {}", index + 1),
+        n => tr_format!("Slot {}", "Slot {}", n + 1),
     }
 }
 

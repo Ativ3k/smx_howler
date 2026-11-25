@@ -7,6 +7,7 @@ mod app;
 mod config;
 mod device;
 mod discord;
+mod i18n;
 mod keys;
 mod protocol;
 mod worker;

@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use hidapi::{DeviceInfo, HidApi, HidDevice};
 
+use crate::i18n::{tr, tr_format};
 use crate::protocol::*;
 
 const SHORT_DELAY: Duration = Duration::from_millis(100);
@@ -42,11 +43,17 @@ impl SmxDevice {
     /// battery/status replies (feature report 5) across different HID
     /// collections, so both are probed separately.
     pub fn open(pid: u16) -> Result<Self, String> {
-        let api = HidApi::new().map_err(|err| format!("HID initialisation failed: {err}"))?;
+        let api = HidApi::new().map_err(|err| {
+            tr_format!(
+                "HID initialisation failed: {err}",
+                "Inicjalizacja HID nie powiodła się: {err}"
+            )
+        })?;
         let paths = candidate_paths(&api, pid);
         if paths.is_empty() {
-            return Err(format!(
+            return Err(tr_format!(
                 "SMX Howler {} node not found (VID 258A, PID {pid:04X}).",
+                "Nie znaleziono węzła SMX Howler {} (VID 258A, PID {pid:04X}).",
                 pid_name(pid)
             ));
         }
@@ -73,17 +80,18 @@ impl SmxDevice {
                     }
                     Err(err) => status_errors.push(format!("{err}")),
                 },
-                Err(err) => status_errors.push(format!("open failed: {err}")),
+                Err(err) => status_errors.push(tr_format!(
+                    "open failed: {err}",
+                    "otwarcie nie powiodło się: {err}"
+                )),
             }
         }
 
         let Some((status, product, status_path)) = status else {
-            return Err(format!(
-                "The SMX Howler {} battery/status collection did not answer. \
-                 Move the mouse to wake it, close OemDrv.exe, and reconnect the device.{}",
-                pid_name(pid),
-                error_suffix(&status_errors)
-            ));
+            return Err(tr_format!("The SMX Howler {} battery/status collection did not answer. \
+                     Move the mouse to wake it, close OemDrv.exe, and reconnect the device.{}", "Kolekcja baterii/statusu SMX Howler {} nie odpowiedziała. \
+                     Porusz myszą, aby ją obudzić, zamknij OemDrv.exe i podłącz urządzenie ponownie.{}", pid_name(pid),
+                error_suffix(&status_errors)));
         };
 
         let mut config = None;
@@ -95,9 +103,18 @@ impl SmxDevice {
                         config = Some((dev, path.to_string_lossy().to_string()));
                         break;
                     }
-                    config_errors.push("no settings-block reply".to_owned());
+                    config_errors.push(
+                        tr(
+                            "no settings-block reply",
+                            "brak odpowiedzi z blokiem ustawień",
+                        )
+                        .to_owned(),
+                    );
                 }
-                Err(err) => config_errors.push(format!("open failed: {err}")),
+                Err(err) => config_errors.push(tr_format!(
+                    "open failed: {err}",
+                    "otwarcie nie powiodło się: {err}"
+                )),
             }
         }
 
@@ -121,7 +138,12 @@ impl SmxDevice {
         if self.config.is_some() {
             return Ok(());
         }
-        let api = HidApi::new().map_err(|err| format!("HID initialisation failed: {err}"))?;
+        let api = HidApi::new().map_err(|err| {
+            tr_format!(
+                "HID initialisation failed: {err}",
+                "Inicjalizacja HID nie powiodła się: {err}"
+            )
+        })?;
         let cmd = if self.pid == PID_CABLE {
             CMD_SETTINGS_CABLE
         } else {
@@ -136,11 +158,13 @@ impl SmxDevice {
                 }
             }
         }
-        Err(
+        Err(tr(
             "The settings channel is not answering. Move the mouse to wake it, \
-             close OemDrv.exe, then click Reload settings."
-                .to_owned(),
+             close OemDrv.exe, then click Reload settings.",
+            "Kanał ustawień nie odpowiada. Porusz myszą, aby ją obudzić, \
+             zamknij OemDrv.exe i kliknij Wczytaj ustawienia.",
         )
+        .to_owned())
     }
 
     pub fn short(&self, cmd: u8) -> Result<[u8; 8], String> {
@@ -168,27 +192,40 @@ impl SmxDevice {
         let expected_len = match cmd {
             CMD_SETTINGS_CABLE | CMD_SETTINGS_RECEIVER => SETTINGS_LEN,
             CMD_BUTTONS_CABLE | CMD_BUTTONS_RECEIVER => BUTTONS_LEN,
-            _ => return Err(format!("not a block command: {cmd:02X}")),
+            _ => {
+                return Err(tr_format!(
+                    "not a block command: {cmd:02X}",
+                    "to nie jest polecenie bloku: {cmd:02X}"
+                ))
+            }
         };
         let dev = self.config_device()?;
         let request = build_block_request(cmd);
-        dev.send_feature_report(&request)
-            .map_err(|err| format!("block request {cmd:02X} failed: {err}"))?;
+        dev.send_feature_report(&request).map_err(|err| {
+            tr_format!(
+                "block request {cmd:02X} failed: {err}",
+                "żądanie bloku {cmd:02X} nie powiodło się: {err}"
+            )
+        })?;
         thread::sleep(BLOCK_DELAY);
 
         let mut last_error = String::new();
         for attempt in 0..RETRIES {
             let mut response = vec![0u8; REPORT_LEN];
             response[0] = 8;
-            let read = dev
-                .get_feature_report(&mut response)
-                .map_err(|err| format!("block reply {cmd:02X} failed: {err}"))?;
+            let read = dev.get_feature_report(&mut response).map_err(|err| {
+                tr_format!(
+                    "block reply {cmd:02X} failed: {err}",
+                    "odpowiedź bloku {cmd:02X} nie powiodła się: {err}"
+                )
+            })?;
             if read >= 8 && response[0] == 8 && response[1] == cmd {
                 response.truncate(expected_len);
                 return Ok(response);
             }
-            last_error = format!(
+            last_error = tr_format!(
                 "block reply {cmd:02X} invalid on attempt {} ({} bytes: {})",
+                "niepoprawna odpowiedź bloku {cmd:02X} w próbie {} ({} bajtów: {})",
                 attempt + 1,
                 read,
                 hex(&response[..read.min(16)])
@@ -200,16 +237,20 @@ impl SmxDevice {
 
     fn config_device(&self) -> Result<&HidDevice, String> {
         self.config.as_ref().ok_or_else(|| {
-            "The settings channel is unavailable. Move the mouse to wake it, \
-             close OemDrv.exe, then click Reload settings."
-                .to_owned()
+            tr(
+                "The settings channel is unavailable. Move the mouse to wake it, \
+                 close OemDrv.exe, then click Reload settings.",
+                "Kanał ustawień jest niedostępny. Porusz myszą, aby ją obudzić, \
+                 zamknij OemDrv.exe i kliknij Wczytaj ustawienia.",
+            )
+            .to_owned()
         })
     }
 
     pub fn write_report(&self, report: &[u8]) -> Result<(), String> {
         self.config_device()?
             .send_feature_report(report)
-            .map_err(|err| format!("write failed: {err}"))?;
+            .map_err(|err| tr_format!("write failed: {err}", "zapis nie powiódł się: {err}"))?;
         thread::sleep(Duration::from_millis(220));
         Ok(())
     }
@@ -243,10 +284,11 @@ impl SmxDevice {
         if require_link && bank == Bank::Receiver {
             let link = self.short(CMD_LINK)?;
             if link[2] == 0 {
-                return Err(
-                    "The receiver reports the mouse as asleep/off. Move the mouse, then try again."
-                        .to_owned(),
-                );
+                return Err(tr(
+                    "The receiver reports the mouse as asleep/off. Move the mouse, then try again.",
+                    "Odbiornik zgłasza mysz jako uśpioną/wyłączoną. Porusz myszą i spróbuj ponownie.",
+                )
+                .to_owned());
             }
         }
         let settings_report = build_block_write(bank.settings_cmd(), settings, false);
@@ -259,9 +301,9 @@ impl SmxDevice {
 
 fn pid_name(pid: u16) -> &'static str {
     match pid {
-        PID_CABLE => "cable",
-        PID_RECEIVER => "receiver",
-        _ => "device",
+        PID_CABLE => tr("cable", "kabel"),
+        PID_RECEIVER => tr("receiver", "odbiornik"),
+        _ => tr("device", "urządzenie"),
     }
 }
 
@@ -269,23 +311,35 @@ fn error_suffix(errors: &[String]) -> String {
     if errors.is_empty() {
         String::new()
     } else {
-        format!("\nLast error: {}", errors.last().unwrap())
+        tr_format!(
+            "\nLast error: {}",
+            "\nOstatni błąd: {}",
+            errors.last().unwrap()
+        )
     }
 }
 
 fn query_short(dev: &HidDevice, cmd: u8) -> Result<[u8; 8], String> {
     let request = build_short(cmd);
-    dev.send_feature_report(&request)
-        .map_err(|err| format!("short command {cmd:02X} failed: {err}"))?;
+    dev.send_feature_report(&request).map_err(|err| {
+        tr_format!(
+            "short command {cmd:02X} failed: {err}",
+            "krótkie polecenie {cmd:02X} nie powiodło się: {err}"
+        )
+    })?;
     thread::sleep(SHORT_DELAY);
     let mut response = [0u8; 8];
     response[0] = 5;
-    let read = dev
-        .get_feature_report(&mut response)
-        .map_err(|err| format!("short reply {cmd:02X} failed: {err}"))?;
+    let read = dev.get_feature_report(&mut response).map_err(|err| {
+        tr_format!(
+            "short reply {cmd:02X} failed: {err}",
+            "krótka odpowiedź {cmd:02X} nie powiodła się: {err}"
+        )
+    })?;
     if read < 8 || response[0] != 5 || response[1] != cmd {
-        return Err(format!(
+        return Err(tr_format!(
             "short reply {cmd:02X} was invalid (got {} bytes: {})",
+            "krótka odpowiedź {cmd:02X} była niepoprawna (otrzymano {} bajtów: {})",
             read,
             hex(&response[..read.min(response.len())])
         ));
@@ -337,7 +391,12 @@ fn candidate_paths(api: &HidApi, pid: u16) -> Vec<(CString, String)> {
 }
 
 pub fn list_smx_devices() -> Result<Vec<HidEntry>, String> {
-    let api = HidApi::new().map_err(|err| format!("HID initialisation failed: {err}"))?;
+    let api = HidApi::new().map_err(|err| {
+        tr_format!(
+            "HID initialisation failed: {err}",
+            "Inicjalizacja HID nie powiodła się: {err}"
+        )
+    })?;
     let mut out = Vec::new();
     for info in api.device_list() {
         if info.vendor_id() != VID {
@@ -352,7 +411,12 @@ pub fn list_smx_devices() -> Result<Vec<HidEntry>, String> {
 }
 
 pub fn list_all_devices() -> Result<Vec<HidEntry>, String> {
-    let api = HidApi::new().map_err(|err| format!("HID initialisation failed: {err}"))?;
+    let api = HidApi::new().map_err(|err| {
+        tr_format!(
+            "HID initialisation failed: {err}",
+            "Inicjalizacja HID nie powiodła się: {err}"
+        )
+    })?;
     Ok(api.device_list().map(entry_from_info).collect())
 }
 
@@ -373,7 +437,12 @@ fn entry_from_info(info: &DeviceInfo) -> HidEntry {
 /// status commands and the block commands. This shows which vendor collection
 /// answers battery/link queries and which one carries the configuration blocks.
 pub fn probe() -> Result<Vec<String>, String> {
-    let api = HidApi::new().map_err(|err| format!("HID initialisation failed: {err}"))?;
+    let api = HidApi::new().map_err(|err| {
+        tr_format!(
+            "HID initialisation failed: {err}",
+            "Inicjalizacja HID nie powiodła się: {err}"
+        )
+    })?;
     let mut out = Vec::new();
     for info in api.device_list() {
         if info.vendor_id() != VID || info.interface_number() != 1 {
@@ -394,7 +463,10 @@ pub fn probe() -> Result<Vec<String>, String> {
         let dev = match api.open_path(info.path()) {
             Ok(dev) => dev,
             Err(err) => {
-                out.push(format!("{header}\n  open failed: {err}"));
+                out.push(format!(
+                    "{header}\n  {}: {err}",
+                    tr("open failed", "otwarcie nie powiodło się")
+                ));
                 continue;
             }
         };
@@ -416,9 +488,11 @@ pub fn probe() -> Result<Vec<String>, String> {
                 CMD_BUTTONS_RECEIVER
             },
         );
-        out.push(format!(
+        out.push(tr_format!(
             "{header}\n  short 0x80 link:    {link}\n  short 0x90 battery: {battery}\n  \
-             block settings:     {settings}\n  block buttons:      {buttons}"
+                 block settings:     {settings}\n  block buttons:      {buttons}",
+            "{header}\n  krótkie 0x80 link:       {link}\n  krótkie 0x90 bateria:    {battery}\n  \
+                 blok ustawień:           {settings}\n  blok przycisków:         {buttons}"
         ));
     }
     Ok(out)
@@ -427,7 +501,7 @@ pub fn probe() -> Result<Vec<String>, String> {
 fn probe_short(dev: &HidDevice, cmd: u8) -> String {
     let request = build_short(cmd);
     if let Err(err) = dev.send_feature_report(&request) {
-        return format!("send error: {err}");
+        return tr_format!("send error: {err}", "błąd wysyłania: {err}");
     }
     thread::sleep(SHORT_DELAY);
     let mut response = [0u8; 8];
@@ -436,32 +510,40 @@ fn probe_short(dev: &HidDevice, cmd: u8) -> String {
         Ok(read) => {
             let shown = hex(&response[..read.min(response.len())]);
             if read == 8 && response[0] == 5 && response[1] == cmd {
-                format!("ok ({shown})")
+                tr_format!("ok ({shown})", "ok ({shown})")
             } else {
-                format!("unexpected ({read} bytes: {shown})")
+                tr_format!(
+                    "unexpected ({read} bytes: {shown})",
+                    "nieoczekiwane ({read} bajtów: {shown})"
+                )
             }
         }
-        Err(err) => format!("read error: {err}"),
+        Err(err) => tr_format!("read error: {err}", "błąd odczytu: {err}"),
     }
 }
 
 fn probe_block(dev: &HidDevice, cmd: u8) -> String {
     let request = build_block_request(cmd);
     if let Err(err) = dev.send_feature_report(&request) {
-        return format!("send error: {err}");
+        return tr_format!("send error: {err}", "błąd wysyłania: {err}");
     }
     thread::sleep(BLOCK_DELAY);
     let mut response = vec![0u8; REPORT_LEN];
     response[0] = 8;
     match dev.get_feature_report(&mut response) {
         Ok(read) if read >= 8 && response[0] == 8 && response[1] == cmd => {
-            format!("ok ({read} bytes, header {})", hex(&response[..8]))
+            tr_format!(
+                "ok ({read} bytes, header {})",
+                "ok ({read} bajtów, nagłówek {})",
+                hex(&response[..8])
+            )
         }
-        Ok(read) => format!(
+        Ok(read) => tr_format!(
             "unexpected ({read} bytes: {})",
+            "nieoczekiwane ({read} bajtów: {})",
             hex(&response[..read.min(16)])
         ),
-        Err(err) => format!("read error: {err}"),
+        Err(err) => tr_format!("read error: {err}", "błąd odczytu: {err}"),
     }
 }
 

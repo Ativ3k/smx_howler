@@ -10,6 +10,8 @@ use crate::discord::DiscordConfig;
 pub struct AppConfig {
     /// "receiver" or "cable".
     pub bank: String,
+    /// "en" or "pl".
+    pub language: String,
     pub auto_refresh: bool,
     pub refresh_secs: u64,
     pub discord: DiscordConfig,
@@ -19,6 +21,7 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             bank: "receiver".to_owned(),
+            language: "en".to_owned(),
             auto_refresh: true,
             refresh_secs: 30,
             discord: DiscordConfig::default(),

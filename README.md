@@ -2,6 +2,7 @@
 
 Natywna aplikacja Windows napisana w Rust (egui/eframe) do myszy **SMX Howler** opartej na układzie Sinowealth. Zastępuje fabryczne oprogramowanie i daje dostęp do baterii, DPI, częstotliwości raportowania, podświetlenia, przypisań przycisków oraz Discord Rich Presence.
 
+> [!IMPORTANT]
 > **Status:** działająca aplikacja desktopowa. Testowana z odbiornikiem 2.4 GHz `258A:002F`; kod obsługuje również połączenie kablowe `258A:002E`.
 >
 > Projekt jest nieoficjalny i niepowiązany z producentem. Aplikacja zapisuje dane bezpośrednio do myszy przez HID. Używaj na własną odpowiedzialność.
@@ -14,25 +15,28 @@ Natywna aplikacja Windows napisana w Rust (egui/eframe) do myszy **SMX Howler** 
 - **Przypisania przycisków** – fizyczne przyciski 1–7 oraz ukryte sloty 8–20; skróty klawiaturowe, makra, akcje myszy i akcje specjalne.
 - **Discord** – Rich Presence z baterią/DPI oraz gotowe presety do przypisania mute, deafen i push-to-talk.
 - **Narzędzia** – skanowanie kolekcji HID, podgląd surowych bloków, diagnostyka i test zapisu.
+- **Interfejs EN/PL** – przełącznik języka w nagłówku, zapamiętywany w konfiguracji.
 
 ## Podgląd
 
-![Overview](docs/screenshots/overview.webp)
+Zrzuty ekranu przedstawiają polski interfejs; język można przełączyć na angielski w nagłówku.
 
-| DPI & polling | Lighting |
-| --- | --- |
-| ![DPI & polling](docs/screenshots/dpi.webp) | ![Lighting](docs/screenshots/lighting.webp) |
+![Przegląd](docs/screenshots/overview.webp)
 
-| Buttons | Discord |
-| --- | --- |
-| ![Buttons](docs/screenshots/buttons.webp) | ![Discord](docs/screenshots/discord.webp) |
+| DPI i polling                               | Podświetlenie                               |
+| ------------------------------------------- | ------------------------------------------- |
+| ![DPI i polling](docs/screenshots/dpi.webp) | ![Podświetlenie](docs/screenshots/lighting.webp) |
+
+| Przyciski                                 | Discord                                   |
+| ----------------------------------------- | ----------------------------------------- |
+| ![Przyciski](docs/screenshots/buttons.webp) | ![Discord](docs/screenshots/discord.webp) |
 
 ## Obsługiwany sprzęt
 
-| Połączenie | VID:PID | Opis |
-| --- | --- | --- |
-| USB | `258A:002E` | Mysz podłączona bezpośrednio kablem |
-| 2.4 GHz | `258A:002F` | Odbiornik bezprzewodowy |
+| Połączenie | VID:PID     | Opis                                |
+| ---------- | ----------- | ----------------------------------- |
+| USB        | `258A:002E` | Mysz podłączona bezpośrednio kablem |
+| 2.4 GHz    | `258A:002F` | Odbiornik bezprzewodowy             |
 
 Profil urządzenia: **BY-COMBO3** (6 etapów DPI, 59 wartości DPI, 20 slotów przycisków).
 
@@ -41,8 +45,9 @@ Profil urządzenia: **BY-COMBO3** (6 etapów DPI, 59 wartości DPI, 20 slotów p
 1. Zamknij fabryczną aplikację SMX Howler (`OemDrv.exe`). Trzyma ona otwarty kanał HID i blokuje dostęp.
 2. Podłącz odbiornik 2.4 GHz lub kabel USB i włącz mysz.
 3. Uruchom `target\release\smx_howler.exe`.
-4. W nagłówku wybierz `2.4 GHz receiver` albo `USB cable`, następnie odśwież dane.
-5. Zmień ustawienia i zatwierdź przyciskiem `Apply` / `Save` na danej zakładce.
+4. W nagłówku wybierz `2.4 GHz receiver` / `Odbiornik 2.4 GHz` albo `USB cable` / `Kabel USB`, następnie odśwież dane.
+5. Zmień ustawienia i zatwierdź przyciskiem `Apply` / `Zapisz` na danej zakładce.
+6. Język interfejsu zmienisz przyciskami `EN` / `PL` w prawym górnym rogu.
 
 Gotowy plik znajduje się w `target\release\smx_howler.exe`. Jeśli go nie ma, zbuduj projekt zgodnie z sekcją [Budowanie](#budowanie).
 
@@ -83,6 +88,10 @@ cargo test         # testy jednostkowe; test sprzętowy jest ignorowany
 
 ## Użycie interfejsu
 
+### Język
+
+W prawym górnym rogu znajdują się przyciski `EN` i `PL`. Przełączenie tłumaczy etykiety, opisy, komunikaty statusu oraz błędy bez restartowania aplikacji. Wybór jest od razu zapisywany w `config.json`; domyślnie aktywny jest angielski.
+
 ### Overview
 
 Pokazuje poziom baterii, stan ładowania, transport, VID/PID, identyfikator firmware, stan linku odbiornika oraz aktualny profil (DPI, polling, efekt, liczbę zmienionych przycisków). Dane odświeżają się automatycznie; można też użyć `Refresh battery` i `Reload settings`.
@@ -98,18 +107,18 @@ Pokazuje poziom baterii, stan ładowania, transport, VID/PID, identyfikator firm
 
 Dostępne efekty:
 
-| Kod | Efekt |
-| --- | --- |
-| 0 | Off |
-| 1 | Colorful streaming |
-| 2 | Steady |
-| 3 | Breathing |
-| 4 | Tail |
-| 5 | Neon |
-| 6 | Colorful steady |
-| 7 | Blinking |
-| 8 | Star blink |
-| 9 | Wave |
+| Kod | Efekt              |
+| --- | ------------------ |
+| 0   | Off                |
+| 1   | Colorful streaming |
+| 2   | Steady             |
+| 3   | Breathing          |
+| 4   | Tail               |
+| 5   | Neon               |
+| 6   | Colorful steady    |
+| 7   | Blinking           |
+| 8   | Star blink         |
+| 9   | Wave               |
 
 W zależności od efektu można ustawić jasność, prędkość, kolor stały, paletę oddechania, wspólny kolor lub kolor migania.
 
@@ -135,12 +144,12 @@ Pola `Details` i `State` obsługują placeholdery: `{battery}`, `{dpi}`, `{polli
 
 Discord nie udostępnia publicznego API do wyciszania ani push-to-talk, dlatego aplikacja oferuje presety skrótów do przypisania na przycisk:
 
-| Preset | Domyślny skrót |
-| --- | --- |
-| Mute | `Ctrl+Shift+M` |
-| Deafen | `Ctrl+Shift+D` |
-| Push to talk | `F13` |
-| Push to mute | `F14` |
+| Preset       | Domyślny skrót |
+| ------------ | -------------- |
+| Mute         | `Ctrl+Shift+M` |
+| Deafen       | `Ctrl+Shift+D` |
+| Push to talk | `F13`          |
+| Push to mute | `F14`          |
 
 Te same skróty należy ustawić w Discordzie w `User Settings → Keybinds`. Preset `Assign & save` od razu zapisuje przypisanie w myszy.
 
@@ -155,16 +164,16 @@ Te same skróty należy ustawić w Discordzie w `User Settings → Keybinds`. Pr
 
 CLI jest widoczne w wersji debug oraz w release zbudowanym z `--features console`.
 
-| Polecenie | Działanie |
-| --- | --- |
-| `smx_howler --list` | Lista kolekcji HID myszy |
-| `smx_howler --battery` | Jednorazowy odczyt baterii i linku |
-| `smx_howler --dump-settings` | Podgląd bloku ustawień (154 bajty) |
-| `smx_howler --dump-buttons` | Podgląd bloku przycisków (88 bajtów) |
-| `smx_howler --probe` | Sprawdzenie, która kolekcja HID odpowiada na jakie raporty |
-| `smx_howler --write-test` | Zapis obu bloków bez zmian i porównanie odczytu |
+| Polecenie                         | Działanie                                                   |
+| --------------------------------- | ----------------------------------------------------------- |
+| `smx_howler --list`               | Lista kolekcji HID myszy                                    |
+| `smx_howler --battery`            | Jednorazowy odczyt baterii i linku                          |
+| `smx_howler --dump-settings`      | Podgląd bloku ustawień (154 bajty)                          |
+| `smx_howler --dump-buttons`       | Podgląd bloku przycisków (88 bajtów)                        |
+| `smx_howler --probe`              | Sprawdzenie, która kolekcja HID odpowiada na jakie raporty  |
+| `smx_howler --write-test`         | Zapis obu bloków bez zmian i porównanie odczytu             |
 | `smx_howler --write-test --force` | To samo z pominięciem sprawdzania linku (tylko diagnostyka) |
-| `smx_howler --help` | Pomoc |
+| `smx_howler --help`               | Pomoc                                                       |
 
 Przykład:
 
@@ -185,7 +194,7 @@ Ustawienia aplikacji są zapisywane w:
 %APPDATA%\SmxHowler\config.json
 ```
 
-Plik zawiera wybrany kanał (`receiver`/`cable`), automatyczne odświeżanie i jego interwał oraz konfigurację Discord. Usunięcie pliku przywraca ustawienia domyślne.
+Plik zawiera wybrany kanał (`receiver`/`cable`), język interfejsu (`en`/`pl`), automatyczne odświeżanie i jego interwał oraz konfigurację Discord. Domyślnie interfejs jest angielski; wybór `PL` jest zapamiętywany. Usunięcie pliku przywraca ustawienia domyślne.
 
 ## Jak to działa
 
@@ -225,29 +234,30 @@ cargo run -- --write-test
 
 ## Rozwiązywanie problemów
 
-| Problem | Rozwiązanie |
-| --- | --- |
-| `SMX Howler ... node not found` | Zamknij `OemDrv.exe`, sprawdź kabel/odbiornik i uruchom `--list`. |
-| Bateria się nie zmienia | Mysz jest uśpiona albo link jest zerwany; rusz myszą i odśwież. |
-| Zapis odrzucony / prośba o wybudzenie | Rusz myszą, aby link miał stan `Awake`, i ponów zapis. |
-| Ustawienia wracają po chwili | Mysz spała podczas zapisu albo działała fabryczna aplikacja. Wybudź mysz, zamknij `OemDrv.exe` i zapisz ponownie. |
-| Brak wszystkich 20 przycisków | Włącz `Show unused slots 8-20`. |
-| Discord się nie łączy | Uruchom Discord Desktop, sprawdź Application ID i kliknij `Reconnect now`. |
-| Brak konsoli w release | To zamierzone; zbuduj z `--features console`. |
-| Test zapisu pokazuje różnice | Sprawdź, czy mysz jest wybudzona i czy nie działa aplikacja producenta; `--force` służy tylko do diagnostyki. |
+| Problem                               | Rozwiązanie                                                                                                       |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `SMX Howler ... node not found`       | Zamknij `OemDrv.exe`, sprawdź kabel/odbiornik i uruchom `--list`.                                                 |
+| Bateria się nie zmienia               | Mysz jest uśpiona albo link jest zerwany; rusz myszą i odśwież.                                                   |
+| Zapis odrzucony / prośba o wybudzenie | Rusz myszą, aby link miał stan `Awake`, i ponów zapis.                                                            |
+| Ustawienia wracają po chwili          | Mysz spała podczas zapisu albo działała fabryczna aplikacja. Wybudź mysz, zamknij `OemDrv.exe` i zapisz ponownie. |
+| Brak wszystkich 20 przycisków         | Włącz `Show unused slots 8-20`.                                                                                   |
+| Discord się nie łączy                 | Uruchom Discord Desktop, sprawdź Application ID i kliknij `Reconnect now`.                                        |
+| Brak konsoli w release                | To zamierzone; zbuduj z `--features console`.                                                                     |
+| Test zapisu pokazuje różnice          | Sprawdź, czy mysz jest wybudzona i czy nie działa aplikacja producenta; `--force` służy tylko do diagnostyki.     |
 
 ## Struktura projektu
 
-| Plik | Rola |
-| --- | --- |
-| `src/main.rs` | Punkt wejścia, tryb GUI i CLI |
-| `src/app.rs` | Interfejs egui i logika zakładek |
-| `src/device.rs` | Wykrywanie HID, kanały konfiguracji/statusu, odczyt i zapis |
-| `src/worker.rs` | Wątek roboczy, odświeżanie, zapisywanie i odczyt zwrotny |
-| `src/protocol.rs` | Stałe protokołu, bloki, DPI, efekty, kodowanie przycisków |
-| `src/keys.rs` | Mapowanie klawiszy egui na HID usage/modyfikatory |
-| `src/discord.rs` | Rich Presence przez lokalne IPC Discorda |
-| `src/config.rs` | Zapis konfiguracji w `%APPDATA%\SmxHowler` |
+| Plik              | Rola                                                        |
+| ----------------- | ----------------------------------------------------------- |
+| `src/main.rs`     | Punkt wejścia, tryb GUI i CLI                               |
+| `src/app.rs`      | Interfejs egui i logika zakładek                            |
+| `src/device.rs`   | Wykrywanie HID, kanały konfiguracji/statusu, odczyt i zapis |
+| `src/worker.rs`   | Wątek roboczy, odświeżanie, zapisywanie i odczyt zwrotny    |
+| `src/protocol.rs` | Stałe protokołu, bloki, DPI, efekty, kodowanie przycisków   |
+| `src/keys.rs`     | Mapowanie klawiszy egui na HID usage/modyfikatory           |
+| `src/discord.rs`  | Rich Presence przez lokalne IPC Discorda                    |
+| `src/i18n.rs`     | Słowniki EN/PL i aktywne tłumaczenie interfejsu             |
+| `src/config.rs`   | Zapis konfiguracji w `%APPDATA%\SmxHowler`                  |
 
 ## Licencja
 

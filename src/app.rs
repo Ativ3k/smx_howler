@@ -6,6 +6,7 @@ use eframe::egui::{self, Align, Color32, CornerRadius, Layout, Margin, RichText,
 use crate::config::{self, AppConfig};
 use crate::device::{list_all_devices, list_smx_devices, HidEntry};
 use crate::discord::{self, Discord, DiscordConfig, Presence, PRESETS};
+use crate::i18n::{tr, tr_format, Lang};
 use crate::keys;
 use crate::protocol::*;
 use crate::worker::{Command, Event, MessageLevel, Worker};
@@ -21,7 +22,7 @@ const GREEN: Color32 = Color32::from_rgb(74, 202, 132);
 const AMBER: Color32 = Color32::from_rgb(240, 178, 74);
 const RED: Color32 = Color32::from_rgb(240, 96, 96);
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum Tab {
     Overview,
     Dpi,
@@ -32,14 +33,39 @@ enum Tab {
 }
 
 impl Tab {
-    const ALL: [(Tab, &'static str, &'static str); 6] = [
-        (Tab::Overview, "Overview", "Battery and device status"),
-        (Tab::Dpi, "DPI & polling", "Sensitivity and report rate"),
-        (Tab::Lighting, "Lighting", "Effects and colours"),
-        (Tab::Buttons, "Buttons", "Remap mouse buttons"),
-        (Tab::Discord, "Discord", "Rich Presence and keybinds"),
-        (Tab::Advanced, "Advanced", "Raw blocks and HID details"),
+    const ALL: [Tab; 6] = [
+        Tab::Overview,
+        Tab::Dpi,
+        Tab::Lighting,
+        Tab::Buttons,
+        Tab::Discord,
+        Tab::Advanced,
     ];
+
+    fn title(self) -> &'static str {
+        match self {
+            Tab::Overview => tr("Overview", "Przegląd"),
+            Tab::Dpi => tr("DPI & polling", "DPI i polling"),
+            Tab::Lighting => tr("Lighting", "Podświetlenie"),
+            Tab::Buttons => tr("Buttons", "Przyciski"),
+            Tab::Discord => "Discord",
+            Tab::Advanced => tr("Advanced", "Zaawansowane"),
+        }
+    }
+
+    fn hint(self) -> &'static str {
+        match self {
+            Tab::Overview => tr("Battery and device status", "Bateria i stan urządzenia"),
+            Tab::Dpi => tr(
+                "Sensitivity and report rate",
+                "Czułość i częstotliwość raportowania",
+            ),
+            Tab::Lighting => tr("Effects and colours", "Efekty i kolory"),
+            Tab::Buttons => tr("Remap mouse buttons", "Przypisz przyciski myszy"),
+            Tab::Discord => tr("Rich Presence and keybinds", "Rich Presence i skróty"),
+            Tab::Advanced => tr("Raw blocks and HID details", "Surowe bloki i szczegóły HID"),
+        }
+    }
 }
 
 struct LogEntry {
@@ -83,6 +109,7 @@ impl HowlerApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         configure_style(&cc.egui_ctx);
         let config = config::load();
+        Lang::from_config(&config.language).set();
         let bank = Bank::from_config(&config.bank);
         let (worker, events) = Worker::spawn(cc.egui_ctx.clone());
         let discord = Discord::spawn();
@@ -119,7 +146,10 @@ impl HowlerApp {
         };
         app.log(
             MessageLevel::Info,
-            "Close the SMX Howler vendor app (OemDrv.exe) before applying settings — it keeps the vendor HID channel open.",
+            tr(
+                "Close the SMX Howler vendor app (OemDrv.exe) before applying settings — it keeps the vendor HID channel open.",
+                "Zamknij fabryczną aplikację SMX Howler (OemDrv.exe) przed zapisem ustawień — blokuje kanał HID producenta.",
+            ),
         );
         app.worker.send(Command::SetTarget(bank));
         app.refresh_presence(true);
@@ -232,15 +262,18 @@ impl HowlerApp {
                     self.buttons[slot] = action.encode();
                     self.log(
                         MessageLevel::Info,
-                        format!(
-                            "{} set to {}. Press 'Apply assignments' to store it in the mouse.",
-                            slot_label(slot),
-                            action.label()
-                        ),
+                        tr_format!("{} set to {}. Press 'Apply assignments' to store it in the mouse.", "{} ustawiono na {}. Kliknij „Zapisz przypisania”, aby zapisać w myszy.", slot_label(slot),
+                            action.label()),
                     );
                 }
                 Err(()) => {
-                    self.log(MessageLevel::Info, "Key capture cancelled.");
+                    self.log(
+                        MessageLevel::Info,
+                        tr(
+                            "Key capture cancelled.",
+                            "Przechwytywanie klawisza anulowane.",
+                        ),
+                    );
                 }
             }
         }
@@ -292,6 +325,23 @@ impl HowlerApp {
         }
     }
 
+    fn set_language(&mut self, lang: Lang) {
+        if Lang::current() == lang {
+            return;
+        }
+        lang.set();
+        self.config.language = lang.config_key().to_owned();
+        self.save_config();
+        self.log(
+            MessageLevel::Info,
+            tr(
+                "Interface language set to English.",
+                "Język interfejsu ustawiono na polski.",
+            ),
+        );
+        self.refresh_presence(true);
+    }
+
     fn refresh_presence(&mut self, force: bool) {
         let cfg = self.config.discord.clone();
         if !cfg.enabled || cfg.client_id.trim().is_empty() {
@@ -331,9 +381,9 @@ impl HowlerApp {
             "device",
             if cfg.show_device {
                 if self.status.connected {
-                    self.status.via.clone()
+                    transport_label(&self.status.via).to_owned()
                 } else {
-                    "Disconnected".to_owned()
+                    tr("Disconnected", "Brak połączenia").to_owned()
                 }
             } else {
                 String::new()
@@ -343,9 +393,9 @@ impl HowlerApp {
             "buttons",
             if cfg.show_buttons {
                 if self.buttons == FACTORY_BUTTONS {
-                    "Factory buttons".to_owned()
+                    tr("Factory buttons", "Przyciski fabryczne").to_owned()
                 } else {
-                    "Custom buttons".to_owned()
+                    tr("Custom buttons", "Przyciski własne").to_owned()
                 }
             } else {
                 String::new()
@@ -391,30 +441,54 @@ impl HowlerApp {
             ui.label(RichText::new("SMX").size(21.0).strong().color(ACCENT));
             ui.label(RichText::new("HOWLER").size(21.0).strong());
             ui.add_space(6.0);
-            ui.label(RichText::new("Control center").size(12.0).color(MUTED));
+            ui.label(
+                RichText::new(tr("Control center", "Centrum sterowania"))
+                    .size(12.0)
+                    .color(MUTED),
+            );
 
-            right_aligned(ui, 44.0, |ui| {
-                battery_chip(ui, &self.status);
+            right_aligned(ui, 32.0, |ui| {
                 if self.busy {
-                    ui.add_space(8.0);
                     ui.spinner();
+                    ui.add_space(8.0);
                 }
+                let current = Lang::current();
+                for lang in [Lang::Pl, Lang::En] {
+                    if ui
+                        .add(egui::Button::selectable(current == lang, lang.label()))
+                        .clicked()
+                    {
+                        self.set_language(lang);
+                    }
+                }
+                ui.label(
+                    RichText::new(tr("Language", "Język"))
+                        .size(10.0)
+                        .color(MUTED),
+                );
             });
         });
 
         ui.add_space(6.0);
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Configure via").size(12.0).color(MUTED));
+            ui.label(
+                RichText::new(tr("Configure via", "Połącz przez"))
+                    .size(12.0)
+                    .color(MUTED),
+            );
             let mut chosen = self.bank;
             ui.add(egui::Button::selectable(
                 chosen == Bank::Receiver,
-                "2.4 GHz receiver",
+                tr("2.4 GHz receiver", "Odbiornik 2.4 GHz"),
             ))
             .clicked()
             .then(|| chosen = Bank::Receiver);
-            ui.add(egui::Button::selectable(chosen == Bank::Cable, "USB cable"))
-                .clicked()
-                .then(|| chosen = Bank::Cable);
+            ui.add(egui::Button::selectable(
+                chosen == Bank::Cable,
+                tr("USB cable", "Kabel USB"),
+            ))
+            .clicked()
+            .then(|| chosen = Bank::Cable);
             if chosen != self.bank {
                 self.set_bank(chosen);
             }
@@ -432,25 +506,39 @@ impl HowlerApp {
                 .color(MUTED),
             );
 
+            ui.add_space(10.0);
+            ui.label(RichText::new("·").color(MUTED));
+            ui.add_space(10.0);
+            battery_chip(ui, &self.status);
+
             right_aligned(ui, 24.0, |ui| {
                 if ui
-                    .add_enabled(!self.busy, egui::Button::new("Refresh"))
+                    .add_enabled(!self.busy, egui::Button::new(tr("Refresh", "Odśwież")))
                     .clicked()
                 {
                     self.refresh_now();
                 }
                 if ui
-                    .add_enabled(!self.busy, egui::Button::new("Reload settings"))
+                    .add_enabled(
+                        !self.busy,
+                        egui::Button::new(tr("Reload settings", "Wczytaj ustawienia")),
+                    )
                     .clicked()
                 {
                     self.reload();
                 }
-                if let Some(at) = self.status_at {
-                    ui.label(
-                        RichText::new(format!("battery updated {}s ago", at.elapsed().as_secs()))
+                if ui.available_width() > 150.0 {
+                    if let Some(at) = self.status_at {
+                        ui.label(
+                            RichText::new(tr_format!(
+                                "battery updated {}s ago",
+                                "bateria odświeżona {} s temu",
+                                at.elapsed().as_secs()
+                            ))
                             .size(11.0)
                             .color(MUTED),
-                    );
+                        );
+                    }
                 }
             });
         });
@@ -458,31 +546,39 @@ impl HowlerApp {
 
     fn nav(&mut self, ui: &mut egui::Ui) {
         ui.add_space(10.0);
-        ui.label(RichText::new("DEVICE").size(10.0).color(MUTED));
+        ui.label(
+            RichText::new(tr("DEVICE", "URZĄDZENIE"))
+                .size(10.0)
+                .color(MUTED),
+        );
         ui.add_space(4.0);
         let color = if self.status.connected { GREEN } else { RED };
         ui.horizontal(|ui| {
             ui.label(RichText::new("•").color(color));
             ui.label(
                 RichText::new(if self.status.connected {
-                    self.status.via.as_str()
+                    transport_label(&self.status.via)
                 } else {
-                    "Not connected"
+                    tr("Not connected", "Nie połączono")
                 })
                 .size(12.0),
             );
         });
         ui.add_space(14.0);
 
-        ui.label(RichText::new("SECTIONS").size(10.0).color(MUTED));
+        ui.label(
+            RichText::new(tr("SECTIONS", "SEKCJE"))
+                .size(10.0)
+                .color(MUTED),
+        );
         ui.add_space(4.0);
-        for (tab, title, hint) in Tab::ALL {
+        for tab in Tab::ALL {
             let selected = self.tab == tab;
             let response = ui.add_sized(
                 [ui.available_width(), 36.0],
-                egui::Button::selectable(selected, RichText::new(title).size(14.0)),
+                egui::Button::selectable(selected, RichText::new(tab.title()).size(14.0)),
             );
-            let response = response.on_hover_text(hint);
+            let response = response.on_hover_text(tab.hint());
             if response.clicked() {
                 self.tab = tab;
             }
@@ -490,7 +586,7 @@ impl HowlerApp {
 
         ui.with_layout(Layout::bottom_up(Align::LEFT), |ui| {
             ui.add_space(4.0);
-            if ui.button("Help & notes").clicked() {
+            if ui.button(tr("Help & notes", "Pomoc i uwagi")).clicked() {
                 self.show_help = true;
             }
             ui.label(
@@ -501,15 +597,21 @@ impl HowlerApp {
             ui.add_space(6.0);
             if self.messages.iter().any(|e| e.level == MessageLevel::Error) {
                 ui.label(
-                    RichText::new("Last operation had an error")
-                        .size(10.0)
-                        .color(RED),
+                    RichText::new(tr(
+                        "Last operation had an error",
+                        "Ostatnia operacja zakończyła się błędem",
+                    ))
+                    .size(10.0)
+                    .color(RED),
                 );
             } else {
                 ui.label(
-                    RichText::new("Reads preserve unknown bytes")
-                        .size(10.0)
-                        .color(MUTED),
+                    RichText::new(tr(
+                        "Reads preserve unknown bytes",
+                        "Odczyt zachowuje nieznane bajty",
+                    ))
+                    .size(10.0)
+                    .color(MUTED),
                 );
             }
         });
@@ -522,15 +624,20 @@ impl HowlerApp {
                 ui.label(RichText::new("•").size(9.0).color(color));
                 ui.label(RichText::new(truncate(&last.text, 150)).size(11.0));
                 ui.label(
-                    RichText::new(format!("· {}s ago", last.at.elapsed().as_secs()))
-                        .size(10.0)
-                        .color(MUTED),
+                    RichText::new(tr_format!(
+                        "· {}s ago",
+                        "· {} s temu",
+                        last.at.elapsed().as_secs()
+                    ))
+                    .size(10.0)
+                    .color(MUTED),
                 );
             } else {
                 ui.label(
-                    RichText::new(
+                    RichText::new(tr(
                         "Ready. Close the SMX Howler vendor app before applying settings.",
-                    )
+                        "Gotowe. Zamknij fabryczną aplikację SMX Howler przed zapisem ustawień.",
+                    ))
                     .size(11.0)
                     .color(MUTED),
                 );
@@ -552,8 +659,11 @@ impl HowlerApp {
     fn overview(&mut self, ui: &mut egui::Ui) {
         heading(
             ui,
-            "Overview",
-            "Live battery, link state and a quick health check for the mouse.",
+            tr("Overview", "Przegląd"),
+            tr(
+                "Live battery, link state and a quick health check for the mouse.",
+                "Bateria na żywo, stan połączenia i szybka diagnostyka myszy.",
+            ),
         );
 
         if let Some(error) = self.status.error.clone() {
@@ -568,7 +678,7 @@ impl HowlerApp {
                     ui.label(
                         RichText::new(match self.status.percent {
                             Some(percent) => format!("{percent}%"),
-                            None if self.status.charging => "Charging".to_owned(),
+                            None if self.status.charging => tr("Charging", "Ładowanie").to_owned(),
                             None => "—".to_owned(),
                         })
                         .size(46.0)
@@ -586,9 +696,9 @@ impl HowlerApp {
                 ui.add_space(18.0);
                 ui.vertical(|ui| {
                     let source = if self.status.connected {
-                        self.status.via.clone()
+                        transport_label(&self.status.via).to_owned()
                     } else {
-                        "No device".to_owned()
+                        tr("No device", "Brak urządzenia").to_owned()
                     };
                     pill(
                         ui,
@@ -611,21 +721,31 @@ impl HowlerApp {
                     );
                     if !self.status.identity.is_empty() {
                         ui.label(
-                            RichText::new(format!("Firmware identity: {}", self.status.identity))
-                                .size(12.0)
-                                .color(MUTED),
+                            RichText::new(tr_format!(
+                                "Firmware identity: {}",
+                                "Identyfikator firmware: {}",
+                                self.status.identity
+                            ))
+                            .size(12.0)
+                            .color(MUTED),
                         );
                     }
                 });
                 ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
                     if ui
-                        .add_enabled(!self.busy, egui::Button::new("Reload settings"))
+                        .add_enabled(
+                            !self.busy,
+                            egui::Button::new(tr("Reload settings", "Wczytaj ustawienia")),
+                        )
                         .clicked()
                     {
                         self.reload();
                     }
                     if ui
-                        .add_enabled(!self.busy, egui::Button::new("Refresh battery"))
+                        .add_enabled(
+                            !self.busy,
+                            egui::Button::new(tr("Refresh battery", "Odśwież baterię")),
+                        )
                         .clicked()
                     {
                         self.refresh_now();
@@ -643,9 +763,15 @@ impl HowlerApp {
             ui.add_space(6.0);
             ui.label(
                 RichText::new(if self.status.charging {
-                    "Charging is only reported over USB cable. Over the receiver, the level is the last value sent by the mouse."
+                    tr(
+                        "Charging is only reported over USB cable. Over the receiver, the level is the last value sent by the mouse.",
+                        "Ładowanie jest raportowane tylko przez kabel USB. Przy odbiorniku poziom to ostatnia wartość wysłana przez mysz.",
+                    )
                 } else {
-                    "Battery is polled automatically. Over the receiver the mouse may briefly sleep and report a stale level."
+                    tr(
+                        "Battery is polled automatically. Over the receiver the mouse may briefly sleep and report a stale level.",
+                        "Bateria jest odpytywana automatycznie. Przy odbiorniku mysz może na chwilę zasnąć i pokazywać ostatnią wartość.",
+                    )
                 })
                 .size(11.0)
                 .color(MUTED),
@@ -655,7 +781,11 @@ impl HowlerApp {
         ui.add_space(12.0);
         ui.columns(2, |columns| {
             card(&mut columns[0], |ui| {
-                ui.label(RichText::new("Device details").size(15.0).strong());
+                ui.label(
+                    RichText::new(tr("Device details", "Szczegóły urządzenia"))
+                        .size(15.0)
+                        .strong(),
+                );
                 ui.add_space(8.0);
                 egui::Grid::new("device_details")
                     .num_columns(2)
@@ -663,17 +793,17 @@ impl HowlerApp {
                     .show(ui, |ui| {
                         grid_row(
                             ui,
-                            "Connection",
+                            tr("Connection", "Połączenie"),
                             if self.status.connected {
-                                "Online"
+                                tr("Online", "Online")
                             } else {
-                                "Offline"
+                                tr("Offline", "Brak połączenia")
                             },
                         );
-                        grid_row(ui, "Transport", &self.bank.label());
+                        grid_row(ui, tr("Transport", "Transport"), self.bank.label());
                         grid_row(
                             ui,
-                            "Product",
+                            tr("Product", "Produkt"),
                             if self.status.product.is_empty() {
                                 "SMX Howler"
                             } else {
@@ -682,28 +812,36 @@ impl HowlerApp {
                         );
                         grid_row(
                             ui,
-                            "Receiver link",
+                            tr("Receiver link", "Link odbiornika"),
                             match self.status.link {
-                                Some(true) => "Awake",
-                                Some(false) => "Asleep",
+                                Some(true) => tr("Awake", "Aktywny"),
+                                Some(false) => tr("Asleep", "Uśpiony"),
                                 None => "—",
                             },
                         );
                         grid_row(
                             ui,
-                            "Identity",
+                            tr("Identity", "Identyfikator"),
                             if self.status.identity.is_empty() {
                                 "—"
                             } else {
                                 &self.status.identity
                             },
                         );
-                        grid_row(ui, "Configured via", &self.bank.label());
+                        grid_row(
+                            ui,
+                            tr("Configured via", "Skonfigurowano przez"),
+                            self.bank.label(),
+                        );
                     });
             });
 
             card(&mut columns[1], |ui| {
-                ui.label(RichText::new("Current profile").size(15.0).strong());
+                ui.label(
+                    RichText::new(tr("Current profile", "Bieżący profil"))
+                        .size(15.0)
+                        .strong(),
+                );
                 ui.add_space(8.0);
                 egui::Grid::new("profile_summary")
                     .num_columns(2)
@@ -711,21 +849,30 @@ impl HowlerApp {
                     .show(ui, |ui| {
                         grid_row(
                             ui,
-                            "Active DPI",
+                            tr("Active DPI", "Aktywne DPI"),
                             &format!("{} DPI", self.draft.active_dpi()),
                         );
-                        grid_row(ui, "Polling", polling_label(self.draft.polling_hz));
                         grid_row(
                             ui,
-                            "DPI stage",
-                            &format!("{} of {}", self.draft.active_stage, DPI_STAGES),
+                            tr("Polling", "Polling"),
+                            polling_label(self.draft.polling_hz),
                         );
-                        grid_row(ui, "Lighting", effect_name(self.draft.effect));
                         grid_row(
                             ui,
-                            "Buttons",
-                            &format!(
+                            tr("DPI stage", "Etap DPI"),
+                            &tr_format!("{} of {}", "{} z {}", self.draft.active_stage, DPI_STAGES),
+                        );
+                        grid_row(
+                            ui,
+                            tr("Lighting", "Podświetlenie"),
+                            effect_name(self.draft.effect),
+                        );
+                        grid_row(
+                            ui,
+                            tr("Buttons", "Przyciski"),
+                            &tr_format!(
                                 "{} customised",
+                                "{} zmienionych",
                                 self.buttons
                                     .iter()
                                     .enumerate()
@@ -735,10 +882,12 @@ impl HowlerApp {
                         );
                         grid_row(
                             ui,
-                            "Settings block",
+                            tr("Settings block", "Blok ustawień"),
                             &match self.settings_block {
-                                Some(ref block) => format!("{} bytes", block.len()),
-                                None => "not loaded".to_owned(),
+                                Some(ref block) => {
+                                    tr_format!("{} bytes", "{} bajtów", block.len())
+                                }
+                                None => tr("not loaded", "nie wczytano").to_owned(),
                             },
                         );
                     });
@@ -747,10 +896,18 @@ impl HowlerApp {
 
         ui.add_space(12.0);
         card(ui, |ui| {
-            ui.label(RichText::new("Recent activity").size(15.0).strong());
+            ui.label(
+                RichText::new(tr("Recent activity", "Ostatnia aktywność"))
+                    .size(15.0)
+                    .strong(),
+            );
             ui.add_space(8.0);
             if self.messages.is_empty() {
-                ui.label(RichText::new("No activity yet.").size(12.0).color(MUTED));
+                ui.label(
+                    RichText::new(tr("No activity yet.", "Brak aktywności."))
+                        .size(12.0)
+                        .color(MUTED),
+                );
             } else {
                 for entry in self.messages.iter().rev().take(6) {
                     ui.horizontal(|ui| {
@@ -758,9 +915,13 @@ impl HowlerApp {
                         ui.label(RichText::new(&entry.text).size(12.0));
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             ui.label(
-                                RichText::new(format!("{}s ago", entry.at.elapsed().as_secs()))
-                                    .size(10.0)
-                                    .color(MUTED),
+                                RichText::new(tr_format!(
+                                    "{}s ago",
+                                    "{} s temu",
+                                    entry.at.elapsed().as_secs()
+                                ))
+                                .size(10.0)
+                                .color(MUTED),
                             );
                         });
                     });
@@ -772,15 +933,23 @@ impl HowlerApp {
         if !self.status.connected {
             ui.add_space(12.0);
             card(ui, |ui| {
-                ui.label(RichText::new("Mouse not found?").size(15.0).strong());
+                ui.label(
+                    RichText::new(tr("Mouse not found?", "Nie znaleziono myszy?"))
+                        .size(15.0)
+                        .strong(),
+                );
                 ui.add_space(6.0);
                 ui.label(
-                    RichText::new(
+                    RichText::new(tr(
                         "1. Plug in the 2.4 GHz receiver or the USB cable.\n\
                          2. Switch the mouse on and move it so the receiver wakes it.\n\
                          3. Close the SMX Howler tray app (OemDrv.exe) — it holds the vendor HID channel.\n\
                          4. Click Refresh. Only one program can change settings at a time.",
-                    )
+                        "1. Podłącz odbiornik 2.4 GHz lub kabel USB.\n\
+                         2. Włącz mysz i porusz nią, aby obudzić odbiornik.\n\
+                         3. Zamknij aplikację SMX Howler (OemDrv.exe) — zajmuje kanał HID producenta.\n\
+                         4. Kliknij Odśwież. Tylko jeden program może zmieniać ustawienia naraz.",
+                    ))
                     .size(12.0)
                     .color(MUTED),
                 );
@@ -795,16 +964,24 @@ impl HowlerApp {
     fn dpi_tab(&mut self, ui: &mut egui::Ui) {
         heading(
             ui,
-            "DPI & polling",
-            "Six DPI stages are stored in the mouse. The active stage is used immediately.",
+            tr("DPI & polling", "DPI i polling"),
+            tr(
+                "Six DPI stages are stored in the mouse. The active stage is used immediately.",
+                "Sześć etapów DPI jest zapisanych w myszy. Aktywny etap działa od razu.",
+            ),
         );
 
         card(ui, |ui| {
-            ui.label(RichText::new("Polling rate").size(15.0).strong());
             ui.label(
-                RichText::new(
+                RichText::new(tr("Polling rate", "Częstotliwość raportowania"))
+                    .size(15.0)
+                    .strong(),
+            );
+            ui.label(
+                RichText::new(tr(
                     "USB report interval. Lower is faster; higher uses slightly less power.",
-                )
+                    "Interwał raportowania USB. Niższy jest szybszy; wyższy zużywa nieco mniej energii.",
+                ))
                 .size(11.0)
                 .color(MUTED),
             );
@@ -823,9 +1000,10 @@ impl HowlerApp {
             });
             ui.add_space(4.0);
             ui.label(
-                RichText::new(
+                RichText::new(tr(
                     "1000 Hz is the factory setting. Some receivers prefer 500 Hz for a more stable link.",
-                )
+                    "1000 Hz to ustawienie fabryczne. Niektóre odbiorniki wolą 500 Hz dla stabilniejszego połączenia.",
+                ))
                 .size(10.0)
                 .color(MUTED),
             );
@@ -834,12 +1012,17 @@ impl HowlerApp {
         ui.add_space(12.0);
         card(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new("DPI stages").size(15.0).strong());
+                ui.label(
+                    RichText::new(tr("DPI stages", "Etapy DPI"))
+                        .size(15.0)
+                        .strong(),
+                );
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     ui.label(
-                        RichText::new(
+                        RichText::new(tr(
                             "The colour is shown on the scroll-wheel LED for that stage.",
-                        )
+                            "Kolor jest pokazywany na LED rolki dla danego etapu.",
+                        ))
                         .size(10.0)
                         .color(MUTED),
                     );
@@ -850,16 +1033,31 @@ impl HowlerApp {
                 .num_columns(4)
                 .spacing([18.0, 10.0])
                 .show(ui, |ui| {
-                    ui.label(RichText::new("ACTIVE").size(10.0).color(MUTED));
-                    ui.label(RichText::new("STAGE").size(10.0).color(MUTED));
-                    ui.label(RichText::new("SENSITIVITY").size(10.0).color(MUTED));
-                    ui.label(RichText::new("WHEEL LED").size(10.0).color(MUTED));
+                    ui.label(
+                        RichText::new(tr("ACTIVE", "AKTYWNY"))
+                            .size(10.0)
+                            .color(MUTED),
+                    );
+                    ui.label(RichText::new(tr("STAGE", "ETAP")).size(10.0).color(MUTED));
+                    ui.label(
+                        RichText::new(tr("SENSITIVITY", "CZUŁOŚĆ"))
+                            .size(10.0)
+                            .color(MUTED),
+                    );
+                    ui.label(
+                        RichText::new(tr("WHEEL LED", "LED ROLKI"))
+                            .size(10.0)
+                            .color(MUTED),
+                    );
                     ui.end_row();
 
                     for index in 0..DPI_STAGES {
                         let stage_number = (index + 1) as u8;
                         ui.radio_value(&mut self.draft.active_stage, stage_number, "");
-                        ui.label(RichText::new(format!("Stage {}", stage_number)).size(13.0));
+                        ui.label(
+                            RichText::new(tr_format!("Stage {}", "Etap {}", stage_number))
+                                .size(13.0),
+                        );
 
                         let mut current = self.draft.stages[index].dpi_index;
                         egui::ComboBox::from_id_salt(("dpi_stage", index))
@@ -896,30 +1094,42 @@ impl HowlerApp {
                 if ui
                     .add_enabled(
                         !self.busy && dirty,
-                        egui::Button::new("Apply DPI & polling"),
+                        egui::Button::new(tr("Apply DPI & polling", "Zapisz DPI i polling")),
                     )
                     .clicked()
                 {
                     self.apply_settings();
                 }
-                if ui.button("Factory stages").clicked() {
+                if ui.button(tr("Factory stages", "Etapy fabryczne")).clicked() {
                     self.draft.stages = factory_stages();
                     self.draft.active_stage = 1;
                 }
-                if ui.button("Revert").clicked() {
+                if ui.button(tr("Revert", "Przywróć")).clicked() {
                     self.draft = self.loaded_draft.clone();
                 }
                 if dirty {
-                    ui.label(RichText::new("Unsaved changes").size(11.0).color(AMBER));
+                    ui.label(
+                        RichText::new(tr("Unsaved changes", "Niezapisane zmiany"))
+                            .size(11.0)
+                            .color(AMBER),
+                    );
                 } else {
-                    ui.label(RichText::new("Matches the mouse").size(11.0).color(MUTED));
+                    ui.label(
+                        RichText::new(tr("Matches the mouse", "Zgodne z myszą"))
+                            .size(11.0)
+                            .color(MUTED),
+                    );
                 }
             });
         });
 
         ui.add_space(12.0);
         card(ui, |ui| {
-            ui.label(RichText::new("Stage preview").size(15.0).strong());
+            ui.label(
+                RichText::new(tr("Stage preview", "Podgląd etapów"))
+                    .size(15.0)
+                    .strong(),
+            );
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 for index in 0..DPI_STAGES {
@@ -947,7 +1157,7 @@ impl HowlerApp {
                                 ui.label(RichText::new("•").size(18.0).color(dot));
                                 ui.label(RichText::new(format!("{}", stage.dpi())).strong());
                                 ui.label(
-                                    RichText::new(format!("Stage {}", index + 1))
+                                    RichText::new(tr_format!("Stage {}", "Etap {}", index + 1))
                                         .size(9.0)
                                         .color(MUTED),
                                 );
@@ -965,12 +1175,15 @@ impl HowlerApp {
     fn lighting_tab(&mut self, ui: &mut egui::Ui) {
         heading(
             ui,
-            "Lighting",
-            "Pick an effect, then tune the parameters that belong to it.",
+            tr("Lighting", "Podświetlenie"),
+            tr(
+                "Pick an effect, then tune the parameters that belong to it.",
+                "Wybierz efekt, a następnie dostosuj należące do niego parametry.",
+            ),
         );
 
         card(ui, |ui| {
-            ui.label(RichText::new("Effect").size(15.0).strong());
+            ui.label(RichText::new(tr("Effect", "Efekt")).size(15.0).strong());
             ui.add_space(8.0);
             let width = (ui.available_width() - 12.0) / 2.0;
             egui::Grid::new("effect_grid")
@@ -1003,15 +1216,22 @@ impl HowlerApp {
 
         ui.add_space(12.0);
         card(ui, |ui| {
-            ui.label(RichText::new("Parameters").size(15.0).strong());
+            ui.label(
+                RichText::new(tr("Parameters", "Parametry"))
+                    .size(15.0)
+                    .strong(),
+            );
             ui.add_space(8.0);
 
             match self.draft.effect {
                 0 => {
                     ui.label(
-                        RichText::new("All body lighting is off. The scroll-wheel DPI indicator can stay lit.")
-                            .size(12.0)
-                            .color(MUTED),
+                        RichText::new(tr(
+                            "All body lighting is off. The scroll-wheel DPI indicator can stay lit.",
+                            "Całe podświetlenie korpusu jest wyłączone. Wskaźnik DPI na rolce może pozostać podświetlony.",
+                        ))
+                        .size(12.0)
+                        .color(MUTED),
                     );
                 }
                 1 => {
@@ -1023,17 +1243,17 @@ impl HowlerApp {
                     level_selector(ui, "Brightness", &mut self.draft.steady_brightness);
                     ui.add_space(8.0);
                     ui.horizontal(|ui| {
-                        ui.label("Colour slot");
+                        ui.label(tr("Colour slot", "Slot koloru"));
                         let mut slot = self.draft.steady_slot as usize;
                         egui::ComboBox::from_id_salt("steady_slot")
                             .width(110.0)
-                            .selected_text(format!("Colour {}", slot + 1))
+                            .selected_text(tr_format!("Colour {}", "Kolor {}", slot + 1))
                             .show_ui(ui, |ui| {
                                 for index in 0..STEADY_COLORS {
                                     ui.selectable_value(
                                         &mut slot,
                                         index,
-                                        format!("Colour {}", index + 1),
+                                        tr_format!("Colour {}", "Kolor {}", index + 1),
                                     );
                                 }
                             });
@@ -1053,12 +1273,16 @@ impl HowlerApp {
                     ui.add_space(6.0);
                     level_selector(ui, "Speed", &mut self.draft.breathing_speed);
                     ui.add_space(8.0);
-                    ui.label(RichText::new("Palette").size(12.0).color(MUTED));
+                    ui.label(
+                        RichText::new(tr("Palette", "Paleta"))
+                            .size(12.0)
+                            .color(MUTED),
+                    );
                     palette_editor(ui, &mut self.draft.breathing_colors);
                 }
                 7 => {
                     ui.horizontal(|ui| {
-                        ui.label("Blink colour");
+                        ui.label(tr("Blink colour", "Kolor migania"));
                         ui.color_edit_button_srgb(&mut self.draft.blink_color);
                         let [r, g, b] = self.draft.blink_color;
                         ui.label(
@@ -1070,18 +1294,24 @@ impl HowlerApp {
                     });
                     ui.add_space(6.0);
                     ui.label(
-                        RichText::new("The default blink timing is used; 0x84/0x63 are preserved from the mouse.")
-                            .size(11.0)
-                            .color(MUTED),
+                        RichText::new(tr(
+                            "The default blink timing is used; 0x84/0x63 are preserved from the mouse.",
+                            "Używane jest domyślne tempo migania; 0x84/0x63 są zachowywane z myszy.",
+                        ))
+                        .size(11.0)
+                        .color(MUTED),
                     );
                 }
                 _ => {
                     level_selector(ui, "Speed", &mut self.draft.shared_speed);
                     ui.add_space(6.0);
                     ui.label(
-                        RichText::new("This shared speed value is also used by the other animated effects (4, 5, 6, 8 and 9).")
-                            .size(11.0)
-                            .color(MUTED),
+                        RichText::new(tr(
+                            "This shared speed value is also used by the other animated effects (4, 5, 6, 8 and 9).",
+                            "Ta wspólna wartość prędkości jest używana także przez pozostałe animowane efekty (4, 5, 6, 8 i 9).",
+                        ))
+                        .size(11.0)
+                        .color(MUTED),
                     );
                 }
             }
@@ -1090,29 +1320,42 @@ impl HowlerApp {
             ui.horizontal(|ui| {
                 let dirty = self.draft != self.loaded_draft;
                 if ui
-                    .add_enabled(!self.busy && dirty, egui::Button::new("Apply lighting"))
+                    .add_enabled(
+                        !self.busy && dirty,
+                        egui::Button::new(tr("Apply lighting", "Zapisz podświetlenie")),
+                    )
                     .clicked()
                 {
                     self.apply_settings();
                 }
-                if ui.button("Revert").clicked() {
+                if ui.button(tr("Revert", "Przywróć")).clicked() {
                     self.draft = self.loaded_draft.clone();
                 }
                 if dirty {
-                    ui.label(RichText::new("Unsaved changes").size(11.0).color(AMBER));
+                    ui.label(
+                        RichText::new(tr("Unsaved changes", "Niezapisane zmiany"))
+                            .size(11.0)
+                            .color(AMBER),
+                    );
                 }
             });
         });
 
         ui.add_space(12.0);
         card(ui, |ui| {
-            ui.label(RichText::new("How the effects map").size(15.0).strong());
+            ui.label(
+                RichText::new(tr("How the effects map", "Mapa efektów"))
+                    .size(15.0)
+                    .strong(),
+            );
             ui.add_space(6.0);
             ui.label(
-                RichText::new(
+                RichText::new(tr(
                     "None · Colorful streaming · Steady · Breathing · Tail · Neon · Colorful steady · Blinking · Star blink · Wave\n\
                      Brightness and speed use 0–4. Steady chooses one of seven palette colours; Breathing cycles the whole palette.",
-                )
+                    "Brak · Tęczowy przepływ · Stały · Oddychanie · Ogon komety · Neon · Tęczowy stały · Miganie · Migoczące gwiazdy · Fala\n\
+                     Jasność i prędkość używają 0–4. Stały wybiera jeden z siedmiu kolorów palety; Oddychanie przechodzi przez całą paletę.",
+                ))
                 .size(11.0)
                 .color(MUTED),
             );
@@ -1126,8 +1369,11 @@ impl HowlerApp {
     fn buttons_tab(&mut self, ui: &mut egui::Ui) {
         heading(
             ui,
-            "Buttons",
-            "Remap the physical buttons. Assignments are written to the mouse, not stored on the PC.",
+            tr("Buttons", "Przyciski"),
+            tr(
+                "Remap the physical buttons. Assignments are written to the mouse, not stored on the PC.",
+                "Przypisz fizyczne przyciski. Ustawienia są zapisywane w myszy, a nie na komputerze.",
+            ),
         );
 
         if let Some(slot) = self.capture {
@@ -1135,10 +1381,7 @@ impl HowlerApp {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new("•").size(12.0).color(AMBER));
                     ui.label(
-                        RichText::new(format!(
-                            "Listening for a key for {}… press any key, or Esc to cancel.",
-                            slot_label(slot)
-                        ))
+                        RichText::new(tr_format!("Listening for a key for {}… press any key, or Esc to cancel.", "Nasłuchiwanie klawisza dla {}… naciśnij dowolny klawisz lub Esc, aby anulować.", slot_label(slot)))
                         .size(13.0)
                         .strong(),
                     );
@@ -1149,15 +1392,25 @@ impl HowlerApp {
 
         card(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Assignments").size(15.0).strong());
+                ui.label(
+                    RichText::new(tr("Assignments", "Przypisania"))
+                        .size(15.0)
+                        .strong(),
+                );
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    ui.checkbox(&mut self.show_all_slots, "Show unused slots 8–20");
+                    ui.checkbox(
+                        &mut self.show_all_slots,
+                        tr("Show unused slots 8–20", "Pokaż nieużywane sloty 8–20"),
+                    );
                 });
             });
             ui.label(
-                RichText::new("Buttons 1–7 are the physical buttons. Slots 8–20 are stored by the firmware but are normally unused.")
-                    .size(11.0)
-                    .color(MUTED),
+                RichText::new(tr(
+                    "Buttons 1–7 are the physical buttons. Slots 8–20 are stored by the firmware but are normally unused.",
+                    "Przyciski 1–7 to fizyczne przyciski. Sloty 8–20 są przechowywane przez firmware, ale zwykle nieużywane.",
+                ))
+                .size(11.0)
+                .color(MUTED),
             );
             ui.add_space(10.0);
 
@@ -1186,13 +1439,13 @@ impl HowlerApp {
                                 ui.label(RichText::new(action.label()).size(12.0).color(MUTED));
                             });
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                if ui.button("Reset").clicked() {
+                                if ui.button(tr("Reset", "Resetuj")).clicked() {
                                     reset_slot = Some(index);
                                 }
-                                if ui.button("Edit…").clicked() {
+                                if ui.button(tr("Edit…", "Edytuj…")).clicked() {
                                     edit_slot = Some(index);
                                 }
-                                if ui.button("Capture key").clicked() {
+                                if ui.button(tr("Capture key", "Przechwyć klawisz")).clicked() {
                                     capture_slot = Some(index);
                                 }
                             });
@@ -1205,7 +1458,11 @@ impl HowlerApp {
                 self.buttons[index] = FACTORY_BUTTONS[index];
                 self.log(
                     MessageLevel::Info,
-                    format!("{} reset to the factory assignment.", slot_label(index)),
+                    tr_format!(
+                        "{} reset to the factory assignment.",
+                        "{} przywrócono do ustawienia fabrycznego.",
+                        slot_label(index)
+                    ),
                 );
             }
             if let Some(index) = edit_slot {
@@ -1222,35 +1479,56 @@ impl HowlerApp {
             ui.horizontal(|ui| {
                 let dirty = self.buttons != self.loaded_buttons;
                 if ui
-                    .add_enabled(!self.busy && dirty, egui::Button::new("Apply assignments"))
+                    .add_enabled(
+                        !self.busy && dirty,
+                        egui::Button::new(tr("Apply assignments", "Zapisz przypisania")),
+                    )
                     .clicked()
                 {
                     self.apply_buttons();
                 }
-                if ui.button("Factory defaults").clicked() {
+                if ui
+                    .button(tr("Factory defaults", "Ustawienia fabryczne"))
+                    .clicked()
+                {
                     self.buttons = FACTORY_BUTTONS;
                 }
-                if ui.button("Revert").clicked() {
+                if ui.button(tr("Revert", "Przywróć")).clicked() {
                     self.buttons = self.loaded_buttons;
                 }
                 if dirty {
-                    ui.label(RichText::new("Unsaved changes").size(11.0).color(AMBER));
+                    ui.label(
+                        RichText::new(tr("Unsaved changes", "Niezapisane zmiany"))
+                            .size(11.0)
+                            .color(AMBER),
+                    );
                 } else {
-                    ui.label(RichText::new("Matches the mouse").size(11.0).color(MUTED));
+                    ui.label(
+                        RichText::new(tr("Matches the mouse", "Zgodne z myszą"))
+                            .size(11.0)
+                            .color(MUTED),
+                    );
                 }
             });
         });
 
         ui.add_space(12.0);
         card(ui, |ui| {
-            ui.label(RichText::new("Supported actions").size(15.0).strong());
+            ui.label(
+                RichText::new(tr("Supported actions", "Obsługiwane akcje"))
+                    .size(15.0)
+                    .strong(),
+            );
             ui.add_space(6.0);
             ui.label(
-                RichText::new(
+                RichText::new(tr(
                     "Mouse buttons, back/forward, volume up/down, DPI up/down/loop, lighting toggle, disabled, \
                      keyboard shortcuts (with Ctrl/Shift/Alt), custom 4-byte actions, and firmware macros.\n\
                      Macros must first be created in the vendor application; the macro number is stored here.",
-                )
+                    "Przyciski myszy, wstecz/dalej, głośność, DPI w górę/w dół/pętla, podświetlenie, wyłączenie, \
+                     skróty klawiaturowe (z Ctrl/Shift/Alt), własne akcje 4-bajtowe i makra firmware.\n\
+                     Makra trzeba najpierw utworzyć w aplikacji producenta; tutaj zapisywany jest tylko numer makra.",
+                ))
                 .size(11.0)
                 .color(MUTED),
             );
@@ -1265,7 +1543,10 @@ impl HowlerApp {
         heading(
             ui,
             "Discord",
-            "Rich Presence shows the mouse state on your Discord profile. Mute and push-to-talk use keybinds.",
+            tr(
+                "Rich Presence shows the mouse state on your Discord profile. Mute and push-to-talk use keybinds.",
+                "Rich Presence pokazuje stan myszy na profilu Discord. Wyciszanie i push-to-talk działają przez skróty.",
+            ),
         );
 
         let status = self.discord.status();
@@ -1276,9 +1557,9 @@ impl HowlerApp {
                     pill(
                         ui,
                         if status.connected {
-                            "Connected"
+                            tr("Connected", "Połączono")
                         } else {
-                            "Offline"
+                            tr("Offline", "Brak połączenia")
                         },
                         if status.connected { GREEN } else { MUTED },
                     );
@@ -1292,22 +1573,29 @@ impl HowlerApp {
             ui.add_space(10.0);
             ui.checkbox(
                 &mut self.discord_form.enabled,
-                "Enable Discord Rich Presence while this app is running",
+                tr(
+                    "Enable Discord Rich Presence while this app is running",
+                    "Włącz Discord Rich Presence, gdy aplikacja działa",
+                ),
             );
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                ui.label("Application Client ID");
+                ui.label(tr("Application Client ID", "ID aplikacji Discord"));
                 ui.add_sized(
                     [280.0, 24.0],
-                    egui::TextEdit::singleline(&mut self.discord_form.client_id)
-                        .hint_text("Paste the Discord application ID"),
+                    egui::TextEdit::singleline(&mut self.discord_form.client_id).hint_text(tr(
+                        "Paste the Discord application ID",
+                        "Wklej ID aplikacji Discord",
+                    )),
                 );
             });
             ui.label(
-                RichText::new(
+                RichText::new(tr(
                     "Create an application at discord.com/developers/applications -> New Application, then copy its Application ID. \
                      Rich Presence works without a bot and without adding the app to a server.",
-                )
+                    "Utwórz aplikację na discord.com/developers/applications -> New Application, a następnie skopiuj jej Application ID. \
+                     Rich Presence działa bez bota i bez dodawania aplikacji do serwera.",
+                ))
                 .size(11.0)
                 .color(MUTED),
             );
@@ -1317,13 +1605,13 @@ impl HowlerApp {
                 .num_columns(2)
                 .spacing([16.0, 8.0])
                 .show(ui, |ui| {
-                    ui.label("Details");
+                    ui.label(tr("Details", "Szczegóły"));
                     ui.add_sized(
                         [380.0, 24.0],
                         egui::TextEdit::singleline(&mut self.discord_form.details),
                     );
                     ui.end_row();
-                    ui.label("State");
+                    ui.label(tr("State", "Stan"));
                     ui.add_sized(
                         [380.0, 24.0],
                         egui::TextEdit::singleline(&mut self.discord_form.state),
@@ -1331,41 +1619,58 @@ impl HowlerApp {
                     ui.end_row();
                 });
             ui.label(
-                RichText::new(
+                RichText::new(tr(
                     "Placeholders: {battery}, {dpi}, {polling}, {device}, {buttons}, {state}. \
                      Each field is limited to 128 characters by Discord.",
-                )
+                    "Placeholdery: {battery}, {dpi}, {polling}, {device}, {buttons}, {state}. \
+                     Discord ogranicza każde pole do 128 znaków.",
+                ))
                 .size(10.0)
                 .color(MUTED),
             );
 
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                ui.checkbox(&mut self.discord_form.show_battery, "Include battery");
-                ui.checkbox(&mut self.discord_form.show_dpi, "Include DPI");
-                ui.checkbox(&mut self.discord_form.show_device, "Include transport");
+                ui.checkbox(
+                    &mut self.discord_form.show_battery,
+                    tr("Include battery", "Dołącz baterię"),
+                );
+                ui.checkbox(
+                    &mut self.discord_form.show_dpi,
+                    tr("Include DPI", "Dołącz DPI"),
+                );
+                ui.checkbox(
+                    &mut self.discord_form.show_device,
+                    tr("Include transport", "Dołącz transport"),
+                );
                 ui.checkbox(
                     &mut self.discord_form.show_buttons,
-                    "Include button profile",
+                    tr("Include button profile", "Dołącz profil przycisków"),
                 );
             });
 
             ui.add_space(12.0);
             ui.horizontal(|ui| {
-                if ui.button("Apply Discord settings").clicked() {
+                if ui
+                    .button(tr("Apply Discord settings", "Zapisz ustawienia Discord"))
+                    .clicked()
+                {
                     self.config.discord = self.discord_form.clone();
                     self.save_config();
                     self.discord_last_key.clear();
                     self.refresh_presence(true);
-                    self.log(MessageLevel::Success, "Discord settings saved.");
+                    self.log(
+                        MessageLevel::Success,
+                        tr("Discord settings saved.", "Ustawienia Discord zapisane."),
+                    );
                 }
-                if ui.button("Reconnect now").clicked() {
+                if ui.button(tr("Reconnect now", "Połącz ponownie")).clicked() {
                     self.config.discord = self.discord_form.clone();
                     self.save_config();
                     self.discord_last_key.clear();
                     self.refresh_presence(true);
                 }
-                if ui.button("Disconnect").clicked() {
+                if ui.button(tr("Disconnect", "Rozłącz")).clicked() {
                     self.discord_last_key.clear();
                     self.discord.update(String::new(), None);
                 }
@@ -1375,22 +1680,27 @@ impl HowlerApp {
         ui.add_space(12.0);
         card(ui, |ui| {
             ui.label(
-                RichText::new("Mute / push-to-talk quick assign")
-                    .size(15.0)
-                    .strong(),
+                RichText::new(tr(
+                    "Mute / push-to-talk quick assign",
+                    "Szybkie przypisanie wyciszenia / push-to-talk",
+                ))
+                .size(15.0)
+                .strong(),
             );
             ui.add_space(4.0);
             ui.label(
-                RichText::new(
+                RichText::new(tr(
                     "Discord has no public mute or push-to-talk API. Assign Discord's own keyboard shortcuts to a mouse button, \
                      then match them in Discord -> User Settings -> Keybinds.",
-                )
+                    "Discord nie udostępnia publicznego API wyciszania ani push-to-talk. Przypisz własne skróty Discorda do przycisku myszy, \
+                     a następnie ustaw je w Discord -> Ustawienia użytkownika -> Skróty klawiszowe.",
+                ))
                 .size(11.0)
                 .color(MUTED),
             );
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                ui.label("Target button");
+                ui.label(tr("Target button", "Przycisk docelowy"));
                 let mut slot = self.discord_slot;
                 egui::ComboBox::from_id_salt("discord_slot")
                     .width(150.0)
@@ -1406,12 +1716,19 @@ impl HowlerApp {
             for preset in PRESETS {
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
-                        ui.label(RichText::new(preset.name).size(13.0).strong());
-                        ui.label(RichText::new(preset.description).size(11.0).color(MUTED));
+                        ui.label(RichText::new(preset.localized_name()).size(13.0).strong());
+                        ui.label(
+                            RichText::new(preset.localized_description())
+                                .size(11.0)
+                                .color(MUTED),
+                        );
                     });
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         if ui
-                            .add_enabled(!self.busy, egui::Button::new("Assign & save"))
+                            .add_enabled(
+                                !self.busy,
+                                egui::Button::new(tr("Assign & save", "Przypisz i zapisz")),
+                            )
                             .clicked()
                         {
                             let action = ButtonAction::Keyboard {
@@ -1422,9 +1739,10 @@ impl HowlerApp {
                             self.apply_buttons();
                             self.log(
                                 MessageLevel::Info,
-                                format!(
+                                tr_format!(
                                     "{} assigned to {} and sent to the mouse.",
-                                    preset.name,
+                                    "{} przypisano do {} i wysłano do myszy.",
+                                    preset.localized_name(),
                                     slot_label(self.discord_slot)
                                 ),
                             );
@@ -1435,10 +1753,12 @@ impl HowlerApp {
             }
             ui.add_space(6.0);
             ui.label(
-                RichText::new(
+                RichText::new(tr(
                     "Tip: F13/F14 are excellent push-to-talk keys because almost nothing else uses them. \
                      Windows may not report them in every app, but Discord accepts them.",
-                )
+                    "Wskazówka: F13/F14 świetnie nadają się do push-to-talk, bo prawie nic ich nie używa. \
+                     Windows może ich nie raportować w każdej aplikacji, ale Discord je akceptuje.",
+                ))
                 .size(10.0)
                 .color(MUTED),
             );
@@ -1452,18 +1772,28 @@ impl HowlerApp {
     fn advanced_tab(&mut self, ui: &mut egui::Ui) {
         heading(
             ui,
-            "Advanced",
-            "Raw protocol blocks, HID collections and diagnostics.",
+            tr("Advanced", "Zaawansowane"),
+            tr(
+                "Raw protocol blocks, HID collections and diagnostics.",
+                "Surowe bloki protokołu, kolekcje HID i diagnostyka.",
+            ),
         );
 
         card(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new("HID collections").size(15.0).strong());
+                ui.label(
+                    RichText::new(tr("HID collections", "Kolekcje HID"))
+                        .size(15.0)
+                        .strong(),
+                );
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if ui.button("Scan").clicked() {
+                    if ui.button(tr("Scan", "Skanuj")).clicked() {
                         self.scan_hid();
                     }
-                    ui.checkbox(&mut self.show_all_hid, "Show all HID devices");
+                    ui.checkbox(
+                        &mut self.show_all_hid,
+                        tr("Show all HID devices", "Pokaż wszystkie urządzenia HID"),
+                    );
                 });
             });
             ui.add_space(6.0);
@@ -1472,9 +1802,12 @@ impl HowlerApp {
             }
             if self.hid_entries.is_empty() {
                 ui.label(
-                    RichText::new("Click Scan to enumerate connected HID collections.")
-                        .size(11.0)
-                        .color(MUTED),
+                    RichText::new(tr(
+                        "Click Scan to enumerate connected HID collections.",
+                        "Kliknij Skanuj, aby wyliczyć podłączone kolekcje HID.",
+                    ))
+                    .size(11.0)
+                    .color(MUTED),
                 );
             } else {
                 egui::Grid::new("hid_table")
@@ -1482,7 +1815,14 @@ impl HowlerApp {
                     .spacing([16.0, 6.0])
                     .striped(true)
                     .show(ui, |ui| {
-                        for header in ["PID", "USAGE", "IF", "KIND", "PRODUCT", "PATH"] {
+                        for header in [
+                            tr("PID", "PID"),
+                            tr("USAGE", "UŻYCIE"),
+                            tr("IF", "IF"),
+                            tr("KIND", "RODZAJ"),
+                            tr("PRODUCT", "PRODUKT"),
+                            tr("PATH", "ŚCIEŻKA"),
+                        ] {
                             ui.label(RichText::new(header).size(10.0).color(MUTED));
                         }
                         ui.end_row();
@@ -1502,9 +1842,13 @@ impl HowlerApp {
                             );
                             ui.label(RichText::new(entry.interface.to_string()).size(11.0));
                             ui.label(
-                                RichText::new(if entry.is_vendor() { "vendor" } else { "HID" })
-                                    .size(10.0)
-                                    .color(if entry.is_vendor() { GREEN } else { MUTED }),
+                                RichText::new(if entry.is_vendor() {
+                                    tr("vendor", "producent")
+                                } else {
+                                    "HID"
+                                })
+                                .size(10.0)
+                                .color(if entry.is_vendor() { GREEN } else { MUTED }),
                             );
                             ui.label(
                                 RichText::new(if entry.product.is_empty() {
@@ -1531,12 +1875,16 @@ impl HowlerApp {
         ui.columns(2, |columns| {
             card(&mut columns[0], |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("Settings block").size(15.0).strong());
+                    ui.label(
+                        RichText::new(tr("Settings block", "Blok ustawień"))
+                            .size(15.0)
+                            .strong(),
+                    );
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         if ui
                             .add_enabled(
                                 self.settings_block.is_some(),
-                                egui::Button::new("Copy hex"),
+                                egui::Button::new(tr("Copy hex", "Kopiuj hex")),
                             )
                             .clicked()
                         {
@@ -1559,9 +1907,12 @@ impl HowlerApp {
                     }
                     None => {
                         ui.label(
-                            RichText::new("Load the settings from the mouse to see the block.")
-                                .size(11.0)
-                                .color(MUTED),
+                            RichText::new(tr(
+                                "Load the settings from the mouse to see the block.",
+                                "Wczytaj ustawienia z myszy, aby zobaczyć blok.",
+                            ))
+                            .size(11.0)
+                            .color(MUTED),
                         );
                     }
                 }
@@ -1569,12 +1920,16 @@ impl HowlerApp {
 
             card(&mut columns[1], |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("Button block").size(15.0).strong());
+                    ui.label(
+                        RichText::new(tr("Button block", "Blok przycisków"))
+                            .size(15.0)
+                            .strong(),
+                    );
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         if ui
                             .add_enabled(
                                 self.buttons_block.is_some(),
-                                egui::Button::new("Copy hex"),
+                                egui::Button::new(tr("Copy hex", "Kopiuj hex")),
                             )
                             .clicked()
                         {
@@ -1597,9 +1952,12 @@ impl HowlerApp {
                     }
                     None => {
                         ui.label(
-                            RichText::new("Load the settings from the mouse to see the block.")
-                                .size(11.0)
-                                .color(MUTED),
+                            RichText::new(tr(
+                                "Load the settings from the mouse to see the block.",
+                                "Wczytaj ustawienia z myszy, aby zobaczyć blok.",
+                            ))
+                            .size(11.0)
+                            .color(MUTED),
                         );
                     }
                 }
@@ -1608,31 +1966,47 @@ impl HowlerApp {
 
         ui.add_space(12.0);
         card(ui, |ui| {
-            ui.label(RichText::new("Diagnostics").size(15.0).strong());
+            ui.label(
+                RichText::new(tr("Diagnostics", "Diagnostyka"))
+                    .size(15.0)
+                    .strong(),
+            );
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                if ui.button("Save hex dumps").clicked() {
+                if ui
+                    .button(tr("Save hex dumps", "Zapisz zrzuty hex"))
+                    .clicked()
+                {
                     match self.save_dumps() {
                         Ok(path) => self.log(
                             MessageLevel::Success,
-                            format!("Hex dumps saved to {}", path.display()),
+                            tr_format!(
+                                "Hex dumps saved to {}",
+                                "Zrzuty hex zapisano w {}",
+                                path.display()
+                            ),
                         ),
                         Err(err) => self.log(MessageLevel::Error, err),
                     }
                 }
-                if ui.button("Scan HID").clicked() {
+                if ui.button(tr("Scan HID", "Skanuj HID")).clicked() {
                     self.scan_hid();
                 }
             });
             ui.add_space(8.0);
             ui.label(
-                RichText::new(
+                RichText::new(tr(
                     "Protocol: short commands use feature report 5 (8 bytes); blocks use feature report 8 (520 bytes).\n\
                      Settings block: 154 bytes incl. the 8-byte header. Button block: 88 bytes incl. header.\n\
                      Every write re-reads both blocks first, then sends the settings block followed by the button block, \
                      exactly like the vendor app. Unknown bytes are preserved.\n\
                      The vendor app (OemDrv.exe) must be closed while this app owns the HID channel.",
-                )
+                    "Protokół: krótkie polecenia używają feature report 5 (8 bajtów); bloki używają feature report 8 (520 bajtów).\n\
+                     Blok ustawień: 154 bajty z 8-bajtowym nagłówkiem. Blok przycisków: 88 bajtów z nagłówkiem.\n\
+                     Każdy zapis najpierw odczytuje oba bloki, potem wysyła blok ustawień i blok przycisków, \
+                     tak jak aplikacja producenta. Nieznane bajty są zachowywane.\n\
+                     Aplikacja producenta (OemDrv.exe) musi być zamknięta, gdy ta aplikacja zajmuje kanał HID.",
+                ))
                 .size(11.0)
                 .color(MUTED),
             );
@@ -1640,10 +2014,14 @@ impl HowlerApp {
 
         ui.add_space(12.0);
         card(ui, |ui| {
-            ui.label(RichText::new("Command line").size(15.0).strong());
+            ui.label(
+                RichText::new(tr("Command line", "Wiersz poleceń"))
+                    .size(15.0)
+                    .strong(),
+            );
             ui.add_space(6.0);
             ui.label(
-                RichText::new(
+                RichText::new(tr(
                     "smx_howler --list             list SMX Howler HID collections\n\
                      smx_howler --battery          print battery/status once\n\
                      smx_howler --dump-settings    print the settings block as hex\n\
@@ -1651,7 +2029,14 @@ impl HowlerApp {
                      smx_howler --help             show usage\n\n\
                      Release builds hide the console. Use `cargo run -- --battery` (debug) or build with \
                      `--features console` for command-line output.",
-                )
+                    "smx_howler --list             lista kolekcji HID SMX Howler\n\
+                     smx_howler --battery          jednorazowy odczyt baterii/statusu\n\
+                     smx_howler --dump-settings    blok ustawień w formacie hex\n\
+                     smx_howler --dump-buttons     blok przycisków w formacie hex\n\
+                     smx_howler --help             pomoc\n\n\
+                     Release ukrywa konsolę. Użyj `cargo run -- --battery` (debug) lub zbuduj z \
+                     `--features console`, aby zobaczyć dane wyjściowe.",
+                ))
                 .size(11.0)
                 .monospace()
                 .color(MUTED),
@@ -1660,21 +2045,40 @@ impl HowlerApp {
     }
 
     fn save_dumps(&self) -> Result<std::path::PathBuf, String> {
-        let settings = self
-            .settings_block
-            .as_ref()
-            .ok_or_else(|| "Load the settings from the mouse first.".to_owned())?;
-        let buttons = self
-            .buttons_block
-            .as_ref()
-            .ok_or_else(|| "Load the settings from the mouse first.".to_owned())?;
+        let settings = self.settings_block.as_ref().ok_or_else(|| {
+            tr(
+                "Load the settings from the mouse first.",
+                "Najpierw wczytaj ustawienia z myszy.",
+            )
+            .to_owned()
+        })?;
+        let buttons = self.buttons_block.as_ref().ok_or_else(|| {
+            tr(
+                "Load the settings from the mouse first.",
+                "Najpierw wczytaj ustawienia z myszy.",
+            )
+            .to_owned()
+        })?;
         let dir = config::config_dir();
-        std::fs::create_dir_all(&dir)
-            .map_err(|err| format!("Could not create {}: {err}", dir.display()))?;
-        std::fs::write(dir.join("settings.hex"), pretty_hex(settings))
-            .map_err(|err| format!("Could not write settings.hex: {err}"))?;
-        std::fs::write(dir.join("buttons.hex"), pretty_hex(buttons))
-            .map_err(|err| format!("Could not write buttons.hex: {err}"))?;
+        std::fs::create_dir_all(&dir).map_err(|err| {
+            tr_format!(
+                "Could not create {}: {err}",
+                "Nie można utworzyć {}: {err}",
+                dir.display()
+            )
+        })?;
+        std::fs::write(dir.join("settings.hex"), pretty_hex(settings)).map_err(|err| {
+            tr_format!(
+                "Could not write settings.hex: {err}",
+                "Nie można zapisać settings.hex: {err}"
+            )
+        })?;
+        std::fs::write(dir.join("buttons.hex"), pretty_hex(buttons)).map_err(|err| {
+            tr_format!(
+                "Could not write buttons.hex: {err}",
+                "Nie można zapisać buttons.hex: {err}"
+            )
+        })?;
         Ok(dir)
     }
 
@@ -1690,16 +2094,19 @@ impl HowlerApp {
         let mut apply = false;
         let mut cancel = false;
 
-        egui::Window::new(format!("Edit {}", slot_label(editor.slot)))
-            .open(&mut open)
-            .collapsible(false)
-            .resizable(false)
-            .default_width(420.0)
-            .show(ctx, |ui| {
+        egui::Window::new(tr_format!("Edit {}", "Edytuj {}", slot_label(editor.slot)))
+        .open(&mut open)
+        .collapsible(false)
+        .resizable(false)
+        .default_width(420.0)
+        .show(ctx, |ui| {
                 ui.label(
-                    RichText::new("Choose an action, then apply it to the button.")
-                        .size(11.0)
-                        .color(MUTED),
+                    RichText::new(tr(
+                        "Choose an action, then apply it to the button.",
+                        "Wybierz akcję, a następnie zastosuj ją do przycisku.",
+                    ))
+                    .size(11.0)
+                    .color(MUTED),
                 );
                 ui.add_space(8.0);
 
@@ -1707,7 +2114,7 @@ impl HowlerApp {
                     .num_columns(2)
                     .spacing([14.0, 10.0])
                     .show(ui, |ui| {
-                        ui.label("Action");
+                        ui.label(tr("Action", "Akcja"));
                         let old_kind = editor.kind;
                         egui::ComboBox::from_id_salt("action_kind")
                             .width(230.0)
@@ -1730,7 +2137,11 @@ impl HowlerApp {
                 ui.add_space(8.0);
                 match editor.kind {
                     ActionKind::Keyboard => {
-                        ui.label(RichText::new("Modifiers").size(12.0).color(MUTED));
+                        ui.label(
+                            RichText::new(tr("Modifiers", "Modyfikatory"))
+                                .size(12.0)
+                                .color(MUTED),
+                        );
                         let mut ctrl = editor.modifiers & MOD_CTRL != 0;
                         let mut shift = editor.modifiers & MOD_SHIFT != 0;
                         let mut alt = editor.modifiers & MOD_ALT != 0;
@@ -1744,7 +2155,7 @@ impl HowlerApp {
                             | (if alt { MOD_ALT } else { 0 });
                         ui.add_space(6.0);
                         ui.horizontal(|ui| {
-                            ui.label("Key");
+                            ui.label(tr("Key", "Klawisz"));
                             egui::ComboBox::from_id_salt("key_usage")
                                 .width(220.0)
                                 .selected_text(editor.key_label())
@@ -1767,34 +2178,35 @@ impl HowlerApp {
                             .num_columns(2)
                             .spacing([14.0, 8.0])
                             .show(ui, |ui| {
-                                ui.label("Macro number");
+                                ui.label(tr("Macro number", "Numer makra"));
                                 ui.add(
                                     egui::DragValue::new(&mut editor.macro_number)
                                         .range(0..=255),
                                 );
                                 ui.end_row();
-                                ui.label("Mode");
+                                ui.label(tr("Mode", "Tryb"));
                                 ui.add(
                                     egui::DragValue::new(&mut editor.macro_mode).range(0..=255),
                                 );
                                 ui.end_row();
-                                ui.label("Event count");
+                                ui.label(tr("Event count", "Liczba zdarzeń"));
                                 ui.add(
                                     egui::DragValue::new(&mut editor.macro_count).range(0..=255),
                                 );
                                 ui.end_row();
                             });
                         ui.label(
-                            RichText::new(
+                            RichText::new(tr(
                                 "The macro itself must be created in the vendor app first; only its number is stored here.",
-                            )
+                                "Samo makro trzeba najpierw utworzyć w aplikacji producenta; tutaj zapisywany jest tylko jego numer.",
+                            ))
                             .size(10.0)
                             .color(MUTED),
                         );
                     }
                     ActionKind::Custom => {
                         ui.horizontal(|ui| {
-                            ui.label("Bytes");
+                            ui.label(tr("Bytes", "Bajty"));
                             ui.add_sized(
                                 [190.0, 24.0],
                                 egui::TextEdit::singleline(&mut editor.custom)
@@ -1802,18 +2214,22 @@ impl HowlerApp {
                             );
                         });
                         ui.label(
-                            RichText::new(
+                            RichText::new(tr(
                                 "Four bytes, sent to the mouse exactly as entered. Useful for experimenting with vendor actions.",
-                            )
+                                "Cztery bajty wysyłane do myszy dokładnie tak, jak wpisano. Przydatne do testowania akcji producenta.",
+                            ))
                             .size(10.0)
                             .color(MUTED),
                         );
                     }
                     _ => {
                         ui.label(
-                            RichText::new("This action has no extra parameters.")
-                                .size(11.0)
-                                .color(MUTED),
+                            RichText::new(tr(
+                                "This action has no extra parameters.",
+                                "Ta akcja nie ma dodatkowych parametrów.",
+                            ))
+                            .size(11.0)
+                            .color(MUTED),
                         );
                     }
                 }
@@ -1822,9 +2238,9 @@ impl HowlerApp {
                 match editor.build() {
                     Ok(action) => {
                         ui.label(
-                            RichText::new(format!("Result: {}", action.label()))
-                                .size(12.0)
-                                .color(ACCENT),
+                            RichText::new(tr_format!("Result: {}", "Wynik: {}", action.label()))
+                            .size(12.0)
+                            .color(ACCENT),
                         );
                     }
                     Err(err) => {
@@ -1835,12 +2251,15 @@ impl HowlerApp {
                 ui.add_space(12.0);
                 ui.horizontal(|ui| {
                     if ui
-                        .add_enabled(editor.build().is_ok(), egui::Button::new("Apply"))
+                        .add_enabled(
+                            editor.build().is_ok(),
+                            egui::Button::new(tr("Apply", "Zastosuj")),
+                        )
                         .clicked()
                     {
                         apply = true;
                     }
-                    if ui.button("Cancel").clicked() {
+                    if ui.button(tr("Cancel", "Anuluj")).clicked() {
                         cancel = true;
                     }
                 });
@@ -1852,11 +2271,8 @@ impl HowlerApp {
                     self.buttons[editor.slot] = action.encode();
                     self.log(
                         MessageLevel::Info,
-                        format!(
-                            "{} set to {}. Press 'Apply assignments' to store it.",
-                            slot_label(editor.slot),
-                            action.label()
-                        ),
+                        tr_format!("{} set to {}. Press 'Apply assignments' to store it.", "{} ustawiono na {}. Kliknij „Zapisz przypisania”, aby zapisać w myszy.", slot_label(editor.slot),
+                            action.label()),
                     );
                 }
                 Err(err) => {
@@ -1871,44 +2287,66 @@ impl HowlerApp {
 
     fn help_window(&mut self, ctx: &egui::Context) {
         let mut open = self.show_help;
-        egui::Window::new("Help & notes")
+        egui::Window::new(tr("Help & notes", "Pomoc i uwagi"))
             .open(&mut open)
             .collapsible(false)
             .resizable(true)
             .default_width(520.0)
             .show(ctx, |ui| {
-                ui.label(RichText::new("Getting connected").size(15.0).strong());
                 ui.label(
-                    RichText::new(
+                    RichText::new(tr("Getting connected", "Połączenie"))
+                        .size(15.0)
+                        .strong(),
+                );
+                ui.label(
+                    RichText::new(tr(
                         "Plug in the 2.4 GHz receiver (258A:002F) or the USB cable (258A:002E), wake the mouse, \
                          and close the SMX Howler tray app. Windows allows one program to own the vendor HID \
                          collection, so the vendor app and this app cannot both change settings.",
-                    )
+                        "Podłącz odbiornik 2.4 GHz (258A:002F) lub kabel USB (258A:002E), obudź mysz \
+                         i zamknij aplikację SMX Howler. Windows pozwala jednemu programowi zająć kolekcję HID \
+                         producenta, więc aplikacja producenta i ta aplikacja nie mogą jednocześnie zmieniać ustawień.",
+                    ))
                     .size(12.0)
                     .color(MUTED),
                 );
                 ui.add_space(10.0);
 
-                ui.label(RichText::new("Battery").size(15.0).strong());
                 ui.label(
-                    RichText::new(
+                    RichText::new(tr("Battery", "Bateria"))
+                        .size(15.0)
+                        .strong(),
+                );
+                ui.label(
+                    RichText::new(tr(
                         "Over USB the mouse reports charging or fully charged; over the receiver it reports a \
                          percentage. A sleeping mouse may keep the last value until it wakes. The battery is \
                          refreshed automatically every 30 seconds and can be refreshed manually at any time.",
-                    )
+                        "Przez USB mysz raportuje ładowanie lub pełne naładowanie; przez odbiornik podaje \
+                         procent. Uśpiona mysz może zachować ostatnią wartość do wybudzenia. Bateria jest \
+                         odświeżana automatycznie co 30 sekund i można ją odświeżyć ręcznie w każdej chwili.",
+                    ))
                     .size(12.0)
                     .color(MUTED),
                 );
                 ui.add_space(10.0);
 
-                ui.label(RichText::new("Saving settings").size(15.0).strong());
                 ui.label(
-                    RichText::new(
+                    RichText::new(tr("Saving settings", "Zapis ustawień"))
+                        .size(15.0)
+                        .strong(),
+                );
+                ui.label(
+                    RichText::new(tr(
                         "All settings are stored in the mouse. On every apply the app first re-reads both blocks, \
                          then writes the settings block and the button block, so bytes it does not understand \
                          survive unchanged. Keep the mouse awake while applying; the receiver rejects writes \
                          when the link is asleep.",
-                    )
+                        "Wszystkie ustawienia są przechowywane w myszy. Przy każdym zapisie aplikacja najpierw \
+                         odczytuje oba bloki, potem zapisuje blok ustawień i blok przycisków, więc nieznane bajty \
+                         pozostają bez zmian. Utrzymuj mysz wybudzoną podczas zapisu; odbiornik odrzuca zapis, \
+                         gdy link jest uśpiony.",
+                    ))
                     .size(12.0)
                     .color(MUTED),
                 );
@@ -1916,24 +2354,36 @@ impl HowlerApp {
 
                 ui.label(RichText::new("Discord").size(15.0).strong());
                 ui.label(
-                    RichText::new(
+                    RichText::new(tr(
                         "Rich Presence needs a Discord application Client ID (Developer Portal -> New Application). \
                          Discord has no public mute/PTT API, so the Discord tab can assign Discord's default \
                          keyboard shortcuts to mouse buttons. Match them in Discord -> User Settings -> Keybinds.",
-                    )
+                        "Rich Presence wymaga Client ID aplikacji Discord (Developer Portal -> New Application). \
+                         Discord nie ma publicznego API wyciszania/PTT, więc zakładka Discord może przypisać \
+                         domyślne skróty Discorda do przycisków myszy. Ustaw je w Discord -> Ustawienia użytkownika -> Skróty klawiszowe.",
+                    ))
                     .size(12.0)
                     .color(MUTED),
                 );
                 ui.add_space(10.0);
-                ui.label(RichText::new("Troubleshooting").size(15.0).strong());
                 ui.label(
-                    RichText::new(
+                    RichText::new(tr("Troubleshooting", "Rozwiązywanie problemów"))
+                        .size(15.0)
+                        .strong(),
+                );
+                ui.label(
+                    RichText::new(tr(
                         "• 'node not found': check the receiver/cable and try another USB port.\n\
                          • 'Could not open': close OemDrv.exe, then click Refresh.\n\
                          • Writes fail: move the mouse to wake the receiver link.\n\
                          • Lighting unchanged: confirm you clicked Apply, and that the mouse accepted the write \
                          (the activity log reports read-back differences).",
-                    )
+                        "• „node not found”: sprawdź odbiornik/kabel i spróbuj innego portu USB.\n\
+                         • „Could not open”: zamknij OemDrv.exe i kliknij Odśwież.\n\
+                         • Zapis nie działa: porusz myszą, aby obudzić link odbiornika.\n\
+                         • Podświetlenie się nie zmienia: upewnij się, że kliknięto Zastosuj i że mysz przyjęła \
+                         zapis (dziennik aktywności pokazuje różnice po odczycie).",
+                    ))
                     .size(12.0)
                     .color(MUTED),
                 );
@@ -1982,6 +2432,7 @@ impl eframe::App for HowlerApp {
             )
             .show(ui, |ui| {
                 egui::ScrollArea::vertical()
+                    .id_salt(self.tab)
                     .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
@@ -2054,21 +2505,21 @@ impl ActionKind {
 
     fn label(self) -> &'static str {
         match self {
-            Self::Left => "Left click",
-            Self::Right => "Right click",
-            Self::Middle => "Middle click",
-            Self::Back => "Back",
-            Self::Forward => "Forward",
-            Self::VolumeUp => "Volume up",
-            Self::VolumeDown => "Volume down",
-            Self::DpiUp => "DPI up",
-            Self::DpiDown => "DPI down",
-            Self::DpiLoop => "DPI loop",
-            Self::LightingToggle => "Lighting on/off",
-            Self::Disabled => "Disabled",
-            Self::Keyboard => "Keyboard shortcut",
-            Self::Macro => "Macro",
-            Self::Custom => "Custom bytes",
+            Self::Left => tr("Left click", "Lewy klik"),
+            Self::Right => tr("Right click", "Prawy klik"),
+            Self::Middle => tr("Middle click", "Środkowy klik"),
+            Self::Back => tr("Back", "Wstecz"),
+            Self::Forward => tr("Forward", "Dalej"),
+            Self::VolumeUp => tr("Volume up", "Głośniej"),
+            Self::VolumeDown => tr("Volume down", "Ciszej"),
+            Self::DpiUp => tr("DPI up", "DPI w górę"),
+            Self::DpiDown => tr("DPI down", "DPI w dół"),
+            Self::DpiLoop => tr("DPI loop", "Pętla DPI"),
+            Self::LightingToggle => tr("Lighting on/off", "Podświetlenie wł./wył."),
+            Self::Disabled => tr("Disabled", "Wyłączone"),
+            Self::Keyboard => tr("Keyboard shortcut", "Skrót klawiaturowy"),
+            Self::Macro => tr("Macro", "Makro"),
+            Self::Custom => tr("Custom bytes", "Własne bajty"),
         }
     }
 
@@ -2197,13 +2648,22 @@ impl ActionEditor {
 fn parse_custom(text: &str) -> Result<[u8; 4], String> {
     let cleaned: String = text.chars().filter(|c| c.is_ascii_hexdigit()).collect();
     if cleaned.len() != 8 {
-        return Err("Enter exactly four bytes (eight hex digits).".to_owned());
+        return Err(tr(
+            "Enter exactly four bytes (eight hex digits).",
+            "Wpisz dokładnie cztery bajty (osiem cyfr hex).",
+        )
+        .to_owned());
     }
     let mut bytes = [0u8; 4];
     for index in 0..4 {
         let start = index * 2;
-        bytes[index] = u8::from_str_radix(&cleaned[start..start + 2], 16)
-            .map_err(|_| "Could not parse the hex bytes.".to_owned())?;
+        bytes[index] = u8::from_str_radix(&cleaned[start..start + 2], 16).map_err(|_| {
+            tr(
+                "Could not parse the hex bytes.",
+                "Nie można odczytać bajtów hex.",
+            )
+            .to_owned()
+        })?;
     }
     Ok(bytes)
 }
@@ -2294,24 +2754,32 @@ fn pill(ui: &mut egui::Ui, text: &str, color: Color32) {
         });
 }
 
+fn transport_label(via: &str) -> &str {
+    match via {
+        "USB cable" => tr("USB cable", "Kabel USB"),
+        "2.4 GHz receiver" => tr("2.4 GHz receiver", "Odbiornik 2.4 GHz"),
+        other => other,
+    }
+}
+
 fn battery_chip(ui: &mut egui::Ui, status: &DeviceStatus) {
     let color = battery_color(status);
-    ui.horizontal(|ui| {
-        ui.vertical(|ui| {
-            ui.label(
-                RichText::new(if status.connected {
-                    status.battery_text()
-                } else {
-                    "Offline".to_owned()
-                })
-                .size(22.0)
+    if status.connected {
+        ui.label(
+            RichText::new(status.battery_text())
+                .size(14.0)
                 .strong()
                 .color(color),
-            );
-            ui.label(RichText::new(status.state_text()).size(9.0).color(MUTED));
-        });
-        ui.label(RichText::new("•").size(18.0).color(color));
-    });
+        );
+        ui.label(RichText::new("·").size(10.0).color(MUTED));
+        ui.label(RichText::new(status.state_text()).size(11.0).color(MUTED));
+    } else {
+        ui.label(
+            RichText::new(tr("Offline", "Brak połączenia"))
+                .size(11.0)
+                .color(MUTED),
+        );
+    }
 }
 
 fn battery_color(status: &DeviceStatus) -> Color32 {
@@ -2348,6 +2816,11 @@ fn error_banner(ui: &mut egui::Ui, text: &str) {
 }
 
 fn level_selector(ui: &mut egui::Ui, label: &str, value: &mut u8) {
+    let label = match label {
+        "Brightness" => tr("Brightness", "Jasność"),
+        "Speed" => tr("Speed", "Prędkość"),
+        other => other,
+    };
     ui.horizontal(|ui| {
         ui.label(RichText::new(label).size(12.0));
         for level in 0..=4u8 {
@@ -2363,11 +2836,11 @@ fn level_selector(ui: &mut egui::Ui, label: &str, value: &mut u8) {
         }
         ui.label(
             RichText::new(match *value {
-                0 => "off / slowest",
-                1 => "low",
-                2 => "medium",
-                3 => "high",
-                _ => "maximum",
+                0 => tr("off / slowest", "wył. / najwolniej"),
+                1 => tr("low", "niska"),
+                2 => tr("medium", "średnia"),
+                3 => tr("high", "wysoka"),
+                _ => tr("maximum", "maksymalna"),
             })
             .size(10.0)
             .color(MUTED),

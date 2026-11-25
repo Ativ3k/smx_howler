@@ -18,6 +18,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
+use crate::i18n::{tr, tr_format};
+
 const OP_HANDSHAKE: u32 = 0;
 const OP_FRAME: u32 = 1;
 const MAX_FRAME: usize = 64 * 1024;
@@ -72,6 +74,40 @@ pub struct DiscordPreset {
 
 /// Discord's default keyboard shortcuts. The user can change them in Discord,
 /// so these are suggestions rather than fixed protocol values.
+impl DiscordPreset {
+    pub fn localized_name(self) -> &'static str {
+        match self.name {
+            "Mute" => tr("Mute", "Wycisz"),
+            "Deafen" => tr("Deafen", "Ogłusz"),
+            "Push to talk" => tr("Push to talk", "Push-to-talk"),
+            "Push to mute" => tr("Push to mute", "Push-to-mute"),
+            other => other,
+        }
+    }
+
+    pub fn localized_description(self) -> &'static str {
+        match self.description {
+            "Ctrl+Shift+M (Discord default)" => tr(
+                "Ctrl+Shift+M (Discord default)",
+                "Ctrl+Shift+M (domyślny w Discordzie)",
+            ),
+            "Ctrl+Shift+D (Discord default)" => tr(
+                "Ctrl+Shift+D (Discord default)",
+                "Ctrl+Shift+D (domyślny w Discordzie)",
+            ),
+            "F13 — assign F13 in Discord keybinds" => tr(
+                "F13 — assign F13 in Discord keybinds",
+                "F13 — ustaw F13 w skrótach Discorda",
+            ),
+            "F14 — assign F14 in Discord keybinds" => tr(
+                "F14 — assign F14 in Discord keybinds",
+                "F14 — ustaw F14 w skrótach Discorda",
+            ),
+            other => other,
+        }
+    }
+}
+
 pub const PRESETS: [DiscordPreset; 4] = [
     DiscordPreset {
         name: "Mute",
@@ -116,7 +152,11 @@ impl Discord {
         let (tx, rx) = mpsc::channel();
         let status = Arc::new(Mutex::new(DiscordStatus {
             connected: false,
-            message: "Discord Rich Presence is disabled.".to_owned(),
+            message: tr(
+                "Discord Rich Presence is disabled.",
+                "Funkcja Discord Rich Presence jest wyłączona.",
+            )
+            .to_owned(),
         }));
         let status_clone = Arc::clone(&status);
         let _ = thread::Builder::new()
@@ -166,7 +206,11 @@ fn run(rx: mpsc::Receiver<Command>, status: Arc<Mutex<DiscordStatus>>) {
                     set_status(
                         &status,
                         false,
-                        "Discord Rich Presence is disabled.".to_owned(),
+                        tr(
+                            "Discord Rich Presence is disabled.",
+                            "Funkcja Discord Rich Presence jest wyłączona.",
+                        )
+                        .to_owned(),
                     );
                     continue;
                 }
@@ -182,7 +226,11 @@ fn run(rx: mpsc::Receiver<Command>, status: Arc<Mutex<DiscordStatus>>) {
                     set_status(
                         &status,
                         false,
-                        "Enter a Discord application Client ID to enable Rich Presence.".to_owned(),
+                        tr(
+                            "Enter a Discord application Client ID to enable Rich Presence.",
+                            "Wpisz Client ID aplikacji Discord, aby włączyć Rich Presence.",
+                        )
+                        .to_owned(),
                     );
                     continue;
                 }
@@ -204,7 +252,11 @@ fn run(rx: mpsc::Receiver<Command>, status: Arc<Mutex<DiscordStatus>>) {
                     set_status(
                         &status,
                         true,
-                        format!("Connected to Discord as {}.", conn.user),
+                        tr_format!(
+                            "Connected to Discord as {}.",
+                            "Połączono z Discordem jako {}.",
+                            conn.user
+                        ),
                     );
                     connection = Some(conn);
                 }
@@ -222,7 +274,11 @@ fn run(rx: mpsc::Receiver<Command>, status: Arc<Mutex<DiscordStatus>>) {
                     set_status(
                         &status,
                         true,
-                        format!("Rich Presence is active ({}).", conn.user),
+                        tr_format!(
+                            "Rich Presence is active ({}).",
+                            "Funkcja Rich Presence jest aktywna ({}).",
+                            conn.user
+                        ),
                     );
                 }
                 Err(err) => {
@@ -276,15 +332,24 @@ impl Connection {
         write_frame(&mut self.file, OP_FRAME, &payload)?;
         let (opcode, response) = read_frame(&mut self.file)?;
         if opcode != OP_FRAME {
-            return Err(format!("Discord sent unexpected IPC opcode {opcode}."));
+            return Err(tr_format!(
+                "Discord sent unexpected IPC opcode {opcode}.",
+                "Discord wysłał nieoczekiwany opcode IPC {opcode}."
+            ));
         }
         if let Some(event) = response.get("evt").and_then(Value::as_str) {
             if event.eq_ignore_ascii_case("ERROR") {
                 let message = response
                     .pointer("/data/message")
                     .and_then(Value::as_str)
-                    .unwrap_or("Discord rejected the Rich Presence update.");
-                return Err(format!("Discord error: {message}"));
+                    .unwrap_or(tr(
+                        "Discord rejected the Rich Presence update.",
+                        "Discord odrzucił aktualizację Rich Presence.",
+                    ));
+                return Err(tr_format!(
+                    "Discord error: {message}",
+                    "Błąd Discorda: {message}"
+                ));
             }
         }
         Ok(())
@@ -309,9 +374,11 @@ fn connect(client_id: &str) -> Result<Connection, String> {
         }
     }
     let mut file = file.ok_or_else(|| {
-        format!(
+        tr_format!(
             "Discord is not running — no IPC pipe found ({last_error}). Start the Discord \
-             desktop app and try again."
+             desktop app and try again.",
+            "Discord nie działa — nie znaleziono rury IPC ({last_error}). Uruchom aplikację \
+             Discord i spróbuj ponownie.",
         )
     })?;
 
@@ -319,7 +386,10 @@ fn connect(client_id: &str) -> Result<Connection, String> {
     write_frame(&mut file, OP_HANDSHAKE, &handshake)?;
     let (opcode, response) = read_frame(&mut file)?;
     if opcode != OP_FRAME {
-        return Err(format!("Discord handshake failed (opcode {opcode})."));
+        return Err(tr_format!(
+            "Discord handshake failed (opcode {opcode}).",
+            "Uzgadnianie połączenia z Discordem nie powiodło się (opcode {opcode})."
+        ));
     }
     let event = response.get("evt").and_then(Value::as_str).unwrap_or("");
     if !event.eq_ignore_ascii_case("READY") {
@@ -327,9 +397,11 @@ fn connect(client_id: &str) -> Result<Connection, String> {
             .get("data")
             .map(|data| data.to_string())
             .unwrap_or_else(|| response.to_string());
-        return Err(format!(
+        return Err(tr_format!(
             "Discord rejected the Client ID. Create an application at \
-             discord.com/developers/applications and paste its Application ID. [{message}]"
+             discord.com/developers/applications and paste its Application ID. [{message}]",
+            "Discord odrzucił Client ID. Utwórz aplikację na \
+             discord.com/developers/applications i wklej jej Application ID. [{message}]",
         ));
     }
     let user = response
@@ -346,10 +418,18 @@ fn connect(client_id: &str) -> Result<Connection, String> {
 }
 
 fn write_frame(file: &mut File, opcode: u32, payload: &Value) -> Result<(), String> {
-    let bytes = serde_json::to_vec(payload)
-        .map_err(|err| format!("Could not encode the Discord message: {err}"))?;
+    let bytes = serde_json::to_vec(payload).map_err(|err| {
+        tr_format!(
+            "Could not encode the Discord message: {err}",
+            "Nie można zakodować wiadomości Discord: {err}"
+        )
+    })?;
     if bytes.len() > MAX_FRAME {
-        return Err("Discord message was too large.".to_owned());
+        return Err(tr(
+            "Discord message was too large.",
+            "Wiadomość Discord była zbyt duża.",
+        )
+        .to_owned());
     }
     let mut header = [0u8; 8];
     header[..4].copy_from_slice(&opcode.to_le_bytes());
@@ -357,23 +437,44 @@ fn write_frame(file: &mut File, opcode: u32, payload: &Value) -> Result<(), Stri
     file.write_all(&header)
         .and_then(|()| file.write_all(&bytes))
         .and_then(|()| file.flush())
-        .map_err(|err| format!("Could not write to Discord: {err}"))
+        .map_err(|err| {
+            tr_format!(
+                "Could not write to Discord: {err}",
+                "Nie można zapisać do Discorda: {err}"
+            )
+        })
 }
 
 fn read_frame(file: &mut File) -> Result<(u32, Value), String> {
     let mut header = [0u8; 8];
-    file.read_exact(&mut header)
-        .map_err(|err| format!("Could not read from Discord: {err}"))?;
+    file.read_exact(&mut header).map_err(|err| {
+        tr_format!(
+            "Could not read from Discord: {err}",
+            "Nie można odczytać z Discorda: {err}"
+        )
+    })?;
     let opcode = u32::from_le_bytes([header[0], header[1], header[2], header[3]]);
     let length = u32::from_le_bytes([header[4], header[5], header[6], header[7]]) as usize;
     if length > MAX_FRAME {
-        return Err("Discord sent an oversized IPC message.".to_owned());
+        return Err(tr(
+            "Discord sent an oversized IPC message.",
+            "Discord wysłał zbyt dużą wiadomość IPC.",
+        )
+        .to_owned());
     }
     let mut payload = vec![0u8; length];
-    file.read_exact(&mut payload)
-        .map_err(|err| format!("Could not read the Discord response: {err}"))?;
-    let value: Value = serde_json::from_slice(&payload)
-        .map_err(|err| format!("Discord sent invalid JSON: {err}"))?;
+    file.read_exact(&mut payload).map_err(|err| {
+        tr_format!(
+            "Could not read the Discord response: {err}",
+            "Nie można odczytać odpowiedzi Discorda: {err}"
+        )
+    })?;
+    let value: Value = serde_json::from_slice(&payload).map_err(|err| {
+        tr_format!(
+            "Discord sent invalid JSON: {err}",
+            "Discord wysłał niepoprawny JSON: {err}"
+        )
+    })?;
     Ok((opcode, value))
 }
 
